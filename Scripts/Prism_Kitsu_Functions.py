@@ -229,6 +229,20 @@ class Prism_Kitsu_Functions(object):
             kitsuAction.triggered.connect(lambda: self.openprjman(shotname))
             return kitsuAction
 
+
+    @err_catcher(name=__name__)
+    def pbBrowser_getPublishMenu(self, origin):
+        prjman = self.core.getConfig(
+            "kitsu", "active", configPath=self.core.prismIni
+        )
+        if (
+            prjman
+            and origin.seq
+        ):
+            prjmanAct = QAction("Publish to Kitsu", origin)
+            prjmanAct.triggered.connect(lambda: self.prjmanPublish(origin))
+            return prjmanAct
+
     @err_catcher(name=__name__)
     def createAsset_open(self, origin):
         prjman = self.core.getConfig(
@@ -276,19 +290,6 @@ class Prism_Kitsu_Functions(object):
             self.createprjmanShots([shotName])
 
     @err_catcher(name=__name__)
-    def pbBrowser_getPublishMenu(self, origin):
-        prjman = self.core.getConfig(
-            "Kitsu", "active", configPath=self.core.prismIni
-        )
-        if (
-            prjman
-            and origin.seq
-        ):
-            prjmanAct = QAction("Publish to Kitsu", origin)
-            prjmanAct.triggered.connect(lambda: self.prjmanPublish(origin))
-            return prjmanAct
-
-    @err_catcher(name=__name__)
     def connectToKitsu(self, user=True):
         pass
 
@@ -302,6 +303,13 @@ class Prism_Kitsu_Functions(object):
 
     @err_catcher(name=__name__)
     def prjmanPublish(self, origin):
+        try:
+            del sys.modules["KitsuPublish"]
+        except:
+            pass
+
+        import KitsuPublish
+
         if origin.tbw_browser.currentWidget().property("tabType") == "Assets":
             pType = "Asset"
         else:
@@ -337,6 +345,17 @@ class Prism_Kitsu_Functions(object):
             sf = 0
 
         # do publish here
+        kitsup = KitsuPublish.Publish(
+            core=self.core,
+            origin=self,
+            ptype=pType,
+            shotName=shotName,
+            task=taskName,
+            version=versionName,
+            preview=mpb,
+            sources=imgPaths,
+            startFrame=sf,
+        )
 
     def openprjman(self, shotName=None, eType="Shot", assetPath=""):
         login_tokens, project_tokens , project_url = self.connectToKitsu()
@@ -406,3 +425,4 @@ class Prism_Kitsu_Functions(object):
         project_tokens = gazu.project.get_project_by_name(prjmanName)
         project_url = gazu.project.get_project_url(project_tokens)
         return login_tokens, project_tokens, project_url
+
