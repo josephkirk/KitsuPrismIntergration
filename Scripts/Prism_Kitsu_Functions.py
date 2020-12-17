@@ -237,7 +237,7 @@ class Prism_Kitsu_Functions(object):
         )
         if (
             prjman
-            and origin.seq
+            and origin.mediaPlaybacks["shots"]["seq"]
         ):
             prjmanAct = QAction("Publish to Kitsu", origin)
             prjmanAct.triggered.connect(lambda: self.prjmanPublish(origin))
@@ -291,7 +291,34 @@ class Prism_Kitsu_Functions(object):
 
     @err_catcher(name=__name__)
     def connectToKitsu(self, user=True):
-        pass
+        try:
+            prjmanSite = self.core.getConfig("kitsu", "site", configPath=self.core.prismIni)
+            prjmanUser = self.core.getConfig("kitsu", "username")
+            prjmanUserPassword = self.core.getConfig("kitsu", "userpassword")
+            prjmanName = self.core.getConfig("kitsu", "projectname", configPath=self.core.prismIni)
+            import gazu
+            api_host= prjmanSite+"/api"
+            gazu.set_host(api_host)
+            from qtazulite import utils
+            try:
+                login_tokens = gazu.log_in(prjmanUser, prjmanUserPassword)
+            except:
+                from qtazulite.widgets.login import Login
+                login_window = Login(host = api_host, user=prjmanUser, password=prjmanUserPassword)
+                login_window.logged_in.connect(self.prismSettings_saveLoginSettings)
+                login_window.exec()
+                login_tokens = login_window.login_tokens
+            project_tokens = gazu.project.get_project_by_name(prjmanName)
+            return login_tokens, project_tokens
+        except:
+            raise
+            return None, None
+
+    @err_catcher(name=__name__)
+    def prismSettings_saveLoginSettings(self, user, password):
+        self.core.setConfig("kitsu", "username", val=user)
+        self.core.setConfig("kitsu", "userpassword", val=password)
+
 
     @err_catcher(name=__name__)
     def createprjmanAssets(self, assets=[]):
@@ -343,7 +370,6 @@ class Prism_Kitsu_Functions(object):
             sf = mpb["pstart"]
         else:
             sf = 0
-
         # do publish here
         kitsup = KitsuPublish.Publish(
             core=self.core,
@@ -356,13 +382,21 @@ class Prism_Kitsu_Functions(object):
             sources=imgPaths,
             startFrame=sf,
         )
+        kitsup.exec()
 
     def openprjman(self, shotName=None, eType="Shot", assetPath=""):
-        login_tokens, project_tokens , project_url = self.connectToKitsu()
+        login_tokens, project_tokens = self.connectToKitsu()
+        import gazu
+        project_url = gazu.project.get_project_url(project_tokens)
+        launch_url = project_url.replace("http://", login_tokens.get("access_token") + "@")
+        import subprocess
+        try:
+            subprocess.Popen("C:/Temp/Chromium/chrome.exe {}".format(project_url))
+        except:
+            # pass
+            import webbrowser
 
-        import webbrowser
-
-        webbrowser.open(project_url)
+            webbrowser.open(launch_url)
 
     @err_catcher(name=__name__)
     def prjmanAssetsToLocal(self, origin):
@@ -413,16 +447,5 @@ class Prism_Kitsu_Functions(object):
     def onSetProjectStartup(self, origin):
         pass
 
-    @err_catcher(name=__name__)
-    def connectToKitsu(self):
-        prjmanSite = self.core.getConfig("kitsu", "site", configPath=self.core.prismIni)
-        prjmanUser = self.core.getConfig("kitsu", "username")
-        prjmanUserPassword = self.core.getConfig("kitsu", "userpassword")
-        prjmanName = self.core.getConfig("kitsu", "projectname", configPath=self.core.prismIni)
-        import gazu
-        gazu.set_host(prjmanSite+"/api")
-        login_tokens = gazu.log_in(prjmanUser, prjmanUserPassword)
-        project_tokens = gazu.project.get_project_by_name(prjmanName)
-        project_url = gazu.project.get_project_url(project_tokens)
-        return login_tokens, project_tokens, project_url
+
 

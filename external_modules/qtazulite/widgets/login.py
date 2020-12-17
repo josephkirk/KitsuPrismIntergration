@@ -76,9 +76,9 @@ class AnimatedLabel(QtWidgets.QLabel):
 class Login(QtWidgets.QDialog):
     """Log-in dialog to CG-Wire"""
 
-    logged_in = QtCore.Signal(bool)
+    logged_in = QtCore.Signal(str, str)
 
-    def __init__(self, parent=None, initialize_host=True):
+    def __init__(self, parent=None, host="", user="", password="", initialize_host=True):
         super(Login, self).__init__(parent)
 
         self.setWindowTitle("Connect to Kitsu")
@@ -98,17 +98,22 @@ class Login(QtWidgets.QDialog):
         host_label = QtWidgets.QLabel("Kitsu URL:")
         host_input = QtWidgets.QLineEdit()
         host_input.setPlaceholderText("https://xxx.cg-wire.com/api")
+        if host:
+            host_input.setText(host)
 
         # User
         user_label = QtWidgets.QLabel("Username:")
         user_input = QtWidgets.QLineEdit()
         user_input.setPlaceholderText("user@host.com")
+        if user:
+            user_input.setText(user)
 
         # Password
         password_label = QtWidgets.QLabel("Password:")
         password_input = QtWidgets.QLineEdit()
         password_input.setEchoMode(QtWidgets.QLineEdit.Password)
-
+        if password_input:
+            password_input.setText(password)
         # Error
         error = AnimatedLabel()
         error.hide()
@@ -144,6 +149,12 @@ class Login(QtWidgets.QDialog):
         if initialize_host:
             # Automatically enter host if available.
             self.initialize_host()
+        
+        self._tokens = None
+
+    @property
+    def login_tokens(self):
+        return self._tokens
 
     def show_error(self, message=None):
         """
@@ -225,7 +236,8 @@ class Login(QtWidgets.QDialog):
         if result:
             name = "{user[first_name]} {user[last_name]}".format(**result)
             log.info("Logged in as %s.." % name)
-            self.logged_in.emit(True)
+            self._tokens = result
+            self.logged_in.emit(user, password)
             self.accept()
         else:
             message = "Unexpected behaviour : Did not retrieve user informations"
