@@ -30,6 +30,15 @@
 # You should have received a copy of the GNU General Public License
 # along with Prism.  If not, see <https://www.gnu.org/licenses/>.
 
+####################################################
+#
+# KITSUPLUGIN
+#
+# Nguyen Phi Hung
+#
+# contact: nguyenphihung.tech@outlook.com
+#
+####################################################
 
 import os
 import sys
@@ -352,7 +361,6 @@ class Prism_Kitsu_Functions(object):
             shotName=shotName,
             task=taskName,
             version=versionName,
-            preview=mpb,
             sources=imgPaths,
             startFrame=sf,
         )
