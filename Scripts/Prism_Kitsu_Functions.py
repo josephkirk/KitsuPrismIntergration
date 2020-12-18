@@ -42,6 +42,10 @@
 
 import os
 import sys
+from typing import Sequence
+
+import gazu
+from gazu import asset
 
 
 
@@ -189,7 +193,7 @@ class Prism_Kitsu_Functions(object):
             "kitsu", "active", configPath=self.core.prismIni
         )
         if prjman:
-            prjmanMenu = QMenu("Kitsu", origin)
+            prjmanMenu = QMenu("kitsu", origin)
 
             actprjman = QAction("Open Kitsu", origin)
             actprjman.triggered.connect(self.openprjman)
@@ -222,8 +226,8 @@ class Prism_Kitsu_Functions(object):
         if entityType != "asset":
             return
 
-        sg = self.core.getConfig("kitsu", "active", configPath=self.core.prismIni)
-        if sg:
+        kitsu = self.core.getConfig("kitsu", "active", configPath=self.core.prismIni)
+        if kitsu:
             kitsuAction = QAction("Open in Kitsu", origin)
             kitsuAction.triggered.connect(
                 lambda: self.openprjman(assetname, eType="Asset", assetPath=assetPath)
@@ -232,8 +236,8 @@ class Prism_Kitsu_Functions(object):
 
     @err_catcher(name=__name__)
     def projectBrowser_getShotMenu(self, origin, shotname):
-        sg = self.core.getConfig("kitsu", "active", configPath=self.core.prismIni)
-        if sg:
+        kitsu = self.core.getConfig("kitsu", "active", configPath=self.core.prismIni)
+        if kitsu:
             kitsuAction = QAction("Open in Kitsu", origin)
             kitsuAction.triggered.connect(lambda: self.openprjman(shotname))
             return kitsuAction
@@ -255,14 +259,32 @@ class Prism_Kitsu_Functions(object):
     @err_catcher(name=__name__)
     def createAsset_open(self, origin):
         prjman = self.core.getConfig(
-            "Kitsu", "active", configPath=self.core.prismIni
+            "kitsu", "active", configPath=self.core.prismIni
         )
         if not prjman:
             return
 
-        origin.chb_createInKitsu = QCheckBox("Create asset in Kitsu")
-        origin.w_options.layout().insertWidget(0, origin.chb_createInKitsu)
-        origin.chb_createInKitsu.setChecked(True)
+        lt, pt = self.connectToKitsu()
+        if all([lt,pt]):
+            origin.chb_createInKitsu = QGroupBox("Create asset in Kitsu")
+            origin.chb_createInKitsu.setCheckable(True)
+            origin.chb_createInKitsu.setLayout(QVBoxLayout())
+
+            origin.lb_KitsuAssetTypes = QLabel("Asset Type:")
+            origin.lb_KitsuAssetDescription = QLabel("Description:")
+            origin.cb_KitsuAssetTypes = QComboBox()
+            asset_types = gazu.asset.all_asset_types()
+            origin.cb_KitsuAssetTypes.addItems([t.get("name") for t in asset_types])
+            origin.tb_assetDescription = QTextEdit()
+            
+            origin.chb_createInKitsu.layout().addWidget(origin.lb_KitsuAssetTypes)
+            origin.chb_createInKitsu.layout().addWidget(origin.cb_KitsuAssetTypes)
+            origin.chb_createInKitsu.layout().addWidget(origin.lb_KitsuAssetDescription)
+            origin.chb_createInKitsu.layout().addWidget(origin.tb_assetDescription)
+
+            origin.w_options.layout().insertWidget(0, origin.chb_createInKitsu)
+            origin.chb_createInKitsu.setChecked(True)
+
 
     @err_catcher(name=__name__)
     def createAsset_typeChanged(self, origin, state):
@@ -274,14 +296,22 @@ class Prism_Kitsu_Functions(object):
         if (
             hasattr(itemDlg, "chb_createInKitsu")
             and itemDlg.chb_createInKitsu.isChecked()
+        ) and (
+            hasattr(itemDlg, "cb_KitsuAssetTypes")
+        ) and (
+            hasattr(itemDlg, "tb_assetDescription")
         ):
-            self.createprjmanAssets([assetPath])
+            self.createprjmanAssets([(
+                assetPath,
+                itemDlg.cb_KitsuAssetTypes.currentText(),
+                itemDlg.tb_assetDescription.toPlainText())])
 
     @err_catcher(name=__name__)
     def editShot_open(self, origin, shotName):
-        if shotName is None:
+        shotName, seqName = self.core.entities.splitShotname(shotName)
+        if not shotName:
             prjman = self.core.getConfig(
-                "Kitsu", "active", configPath=self.core.prismIni
+                "kitsu", "active", configPath=self.core.prismIni
             )
             if not prjman:
                 return
@@ -331,11 +361,55 @@ class Prism_Kitsu_Functions(object):
 
     @err_catcher(name=__name__)
     def createprjmanAssets(self, assets=[]):
-        pass
+        import gazu
+        from pathlib import Path
+        login_tokens, project_dict = self.connectToKitsu()
+        new_assets = []
+        for asset, asset_type, asset_description in assets:
+            if gazu.asset.get_asset_by_name(project_dict, asset):
+                continue
+            asset_type_dict = gazu.asset.get_asset_type_by_name(asset_type)
+            asset_path = Path(asset)
+            if asset_path.parent.name.lower() != asset_type.lower():
+                asset_type_root = Path(self.core.assetPath) / asset_type
+                asset_type_root.mkdir(parents=True, exist_ok=True)
+                asset_path = asset_path.rename(asset_type_root / asset_path.name)
+
+            new_assets.append(gazu.asset.new_asset(
+                project_dict, 
+                asset_type_dict, 
+                self.core.entities.getAssetNameFromPath(asset),
+                asset_description
+            ))
+                
+
+            
+
 
     @err_catcher(name=__name__)
     def createprjmanShots(self, shots=[]):
-        pass
+        import gazu
+        login_tokens, project_tokens = self.connectToKitsu()
+        new_shots=[]
+        for shot in shots:
+            shotName, seqName = self.core.entities.splitShotname(shot)
+            sequence = gazu.shot.get_sequence_by_name(project_tokens, seqName)
+            if not sequence:
+                sequence = gazu.shot.new_sequence(project_tokens, seqName) 
+            if gazu.shot.get_shot_by_name(sequence, shotName):
+                continue
+            shotRange = self.core.getConfig("shotRanges", shot, config="shotinfo")
+            new_shots.append(
+                gazu.shot.new_shot(
+                project_tokens, 
+                sequence, 
+                shotName, 
+                frame_in=shotRange[0], 
+                frame_out=shotRange[1], 
+                data={"metadata": self.core.getConfig("metadata", shot, config="shotinfo")}
+                ))
+            
+            
 
     @err_catcher(name=__name__)
     def prjmanPublish(self, origin):
@@ -395,22 +469,47 @@ class Prism_Kitsu_Functions(object):
     def openprjman(self, shotName=None, eType="Shot", assetPath=""):
         login_tokens, project_tokens = self.connectToKitsu()
         import gazu
-        project_url = gazu.project.get_project_url(project_tokens)
-        launch_url = project_url.replace("http://", login_tokens.get("access_token") + "@")
+        if shotName:
+            if eType == "Shot":
+                shotName, seqName = self.core.entities.splitShotname(shotName)
+                sequence = gazu.shot.get_sequence_by_name(project_tokens, seqName)
+                shot = gazu.shot.get_shot_by_name(sequence, shotName)
+                base_url = gazu.shot.get_shot_url(shot)
+            else:
+                asset = gazu.asset.get_asset_by_name(project_tokens, shotName)
+                base_url = gazu.asset.get_asset_url(asset)
+        else:
+            base_url = gazu.project.get_project_url(project_tokens)
+        launch_url = base_url.replace("http://", "http://" + login_tokens.get("access_token") + "@")
         import subprocess
-        try:
+        if os.path.exists("C:/Temp/Chromium/chrome.exe"):
             subprocess.Popen("C:/Temp/Chromium/chrome.exe {}".format(project_url))
-        except:
+        else:
             # pass
             import webbrowser
-
-            webbrowser.open(launch_url)
+            try:
+                webbrowser.get("chromium").open(launch_url)
+            except:
+                webbrowser.open(launch_url)
 
     @err_catcher(name=__name__)
     def prjmanAssetsToLocal(self, origin):
         # add code here
 
         createdAssets = []
+        login_tokens, project_tokens = self.connectToKitsu()
+        import gazu
+        from pathlib import Path
+        assets = gazu.asset.all_assets_for_project(project_tokens)
+        for asset in assets:
+            asset_name = asset.get("name")
+            asset_type = gazu.asset.get_asset_type(asset.get("entity_type_id")).get("name")
+            assetPath = Path(self.core.assetPath) / asset_type / asset_name
+            if not assetPath.exists():
+                self.core.entities.createEntity("asset", str(assetPath))
+                createdAssets.append(asset_name)
+
+
         if len(createdAssets) > 0:
             msgString = "The following assets were created:\n\n"
 
@@ -428,8 +527,75 @@ class Prism_Kitsu_Functions(object):
     @err_catcher(name=__name__)
     def prjmanAssetsToprjman(self, origin):
         # add code here
+        assets_path = self.core.entities.getAssetPaths()
+        assets_path = [
+            a for a in assets_path if os.path.basename(a) not in self.core.entities.omittedEntities["asset"]
+        ]
+        createdAssets = []
+        updatedAssets = []
 
-        msgString = "No assets were created or updated."
+
+        from box import Box
+        from pathlib import Path
+        login, project = self.connectToKitsu()
+        for asset_path in assets_path:
+            asset_path = Path(asset_path)
+            asset_name = asset_path.name
+            asset = gazu.asset.get_asset_by_name(project, asset_name)
+            if asset:
+                asset = Box(asset)
+                if not asset.data:
+                    asset.data = Box()
+                asset.data.prism = Box()
+                asset.data.prism.path = str(asset_path)
+                info = self.core.getConfig(config="assetinfo", location=str(asset_path))
+                asset.data.prism.assetInfo = self.core.getConfig(configPath=info)
+                gazu.asset.update_asset(asset)
+                updatedAssets.append(asset_name)
+            else:
+                if asset_path.parent == self.core.assetPath:
+                    continue
+                rel_path = asset_path.relative_to(self.core.assetPath)
+                asset_type_name = list(rel_path.parents)[::-1][1]
+                asset_type = gazu.asset.get_asset_type_by_name(asset_type_name)
+                if not asset_type:
+                    asset_type = gazu.asset.new_asset_type(asset_type_name)
+                info = self.core.getConfig(config="assetinfo", location=str(asset_path))
+                prism_info = dict(prism=dict(
+                    path = str(asset_path),
+                    assetinfo = info
+                ))
+                gazu.asset.new_asset(
+                    project,
+                    asset_type,
+                    asset_name,
+                    extra_data=prism_info
+                )
+                createdAssets.append(asset_name)
+
+        if len(createdAssets) > 0 or len(updatedAssets) > 0:
+            msgString = ""
+
+
+            createdAssets.sort()
+            updatedAssets.sort()
+
+            if len(createdAssets) > 0:
+                msgString += "The following assets were created:\n\n"
+
+                for i in createdAssets:
+                    msgString += i + "\n"
+
+            if len(createdAssets) > 0 and len(updatedAssets) > 0:
+                msgString += "\n\n"
+
+            if len(updatedAssets) > 0:
+                msgString += "The following assets were updated:\n\n"
+
+                for i in updatedAssets:
+                    msgString += i + "\n"
+        else:
+            msgString = "No assets were created or updated."
 
         QMessageBox.information(self.core.messageParent, "Kitsu Sync", msgString)
 

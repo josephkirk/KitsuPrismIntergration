@@ -88,7 +88,7 @@ class Publish(QDialog, KitsuPublish_ui.Ui_dlg_kitsuPublish):
             self.task_types = gazu.task.all_task_types_for_asset(self.data_token)
             self.rb_asset.setChecked(True)
         elif ptype == "Shot":
-            sequence, shot = shotName.split("-")
+            shot, sequence = core.entities.splitShotname(shotName)
             self.sequence = gazu.shot.get_sequence_by_name(project_tokens, sequence)
             self.shot = gazu.shot.get_shot_by_name(self.sequence, shot)
             self.all_datas = gazu.shot.all_shots_for_project(project_tokens)
