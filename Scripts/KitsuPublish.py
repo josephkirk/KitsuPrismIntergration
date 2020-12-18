@@ -91,14 +91,14 @@ class Publish(QDialog, KitsuPublish_ui.Ui_dlg_kitsuPublish):
             shot, sequence = core.entities.splitShotname(shotName)
             self.sequence = gazu.shot.get_sequence_by_name(project_tokens, sequence)
             self.shot = gazu.shot.get_shot_by_name(self.sequence, shot)
-            self.all_datas = gazu.shot.all_shots_for_project(project_tokens)
+            self.all_datas = [gazu.shot.get_shot(s.get('id')) for s in gazu.shot.all_shots_for_project(project_tokens)]
             all_shotname = ["{}-{}".format(s.get("sequence_name"),s.get("name")) for s in self.all_datas]
             self.cb_shot.addItems(all_shotname)
             
             # self.cb_shot.setCurrentIndex(self.cb_shot.findText(shotName.split("-")[-1]))
             self.task_types = gazu.task.all_task_types()
             self.rb_shot.setChecked(True)
-            # self.cb_status.addItems([str(i) for i in self.task_types])
+            self.cb_status.addItems([i.get('name') for i in gazu.task.all_task_statuses()])
         
         # self.cb_status.append(self.task_types)
         

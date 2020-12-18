@@ -44,11 +44,6 @@ import os
 import sys
 from typing import Sequence
 
-import gazu
-from gazu import asset
-
-
-
 try:
     from PySide2.QtCore import *
     from PySide2.QtGui import *
@@ -67,8 +62,6 @@ from PrismUtils.Decorators import err_catcher_plugin as err_catcher
 modulePath = os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file__))), "external_modules")
 if modulePath not in sys.path:
     sys.path.append(modulePath)
-
-from gazu import log_in, project
 
 class Prism_Kitsu_Functions(object):
     def __init__(self, core, plugin):
@@ -460,6 +453,7 @@ class Prism_Kitsu_Functions(object):
             ptype=pType,
             shotName=shotName,
             task=taskName,
+            preview=mpb,
             version=versionName,
             sources=imgPaths,
             startFrame=sf,
