@@ -42,7 +42,6 @@
 
 import os
 import sys
-from typing import Sequence
 
 try:
     from PySide2.QtCore import *
@@ -338,7 +337,7 @@ class Prism_Kitsu_Functions(object):
                 from qtazulite.widgets.login import Login
                 login_window = Login(host = api_host, user=prjmanUser, password=prjmanUserPassword)
                 login_window.logged_in.connect(self.prismSettings_saveLoginSettings)
-                login_window.exec()
+                login_window._exec()
                 login_tokens = login_window.login_tokens
             project_tokens = gazu.project.get_project_by_name(prjmanName)
             return login_tokens, project_tokens
@@ -458,7 +457,7 @@ class Prism_Kitsu_Functions(object):
             sources=imgPaths,
             startFrame=sf,
         )
-        kitsup.exec()
+        kitsup._exec()
 
     def openprjman(self, shotName=None, eType="Shot", assetPath=""):
         login_tokens, project_tokens = self.connectToKitsu()
