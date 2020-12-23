@@ -64,6 +64,7 @@ else:
 
 import gazu
 
+from Prism_Kitsu_Utils_Functions import *
 
 class Publish(QDialog, KitsuPublish_ui.Ui_dlg_kitsuPublish):
     def __init__(

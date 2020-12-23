@@ -16,6 +16,20 @@ except:
 from PrismUtils.Decorators import err_catcher_plugin as err_catcher
 
 @err_catcher(name=__name__)
+def printText(text):
+    QMessageBox.warning(QWidget(), str("Print"), str(text))
+
+@err_catcher(name=__name__)
+def mkdir_p(path):
+    try:
+        os.makedirs(path)
+    except OSError as exc:  # Python >2.5
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else:
+            raise
+
+@err_catcher(name=__name__)
 def removeLastSlash(adress):
     if adress[-1:] == "/":
         adress = adress[:-1]
@@ -523,32 +537,32 @@ def GetKitsuAssets(self):
 
     return ksuAssets
 
-@err_catcher(name=__name__)
-def getPublishTypeDict(self, pType, doStatus=False):
-    """
-    Get task types
-    Get task statses
-    """
-    taskTypes_dict = getTaskTypes()
+# @err_catcher(name=__name__)
+# def getPublishTypeDict(self, pType, doStatus=False):
+#     """
+#     Get task types
+#     Get task statses
+#     """
+#     taskTypes_dict = getTaskTypes()
 
-    taskTypes = []
-    for taskType in taskTypes_dict:
-        if taskType["for_shots"] == (pType == "Shot"):
-            taskTypes.append(taskType)
+#     taskTypes = []
+#     for taskType in taskTypes_dict:
+#         if taskType["for_shots"] == (pType == "Shot"):
+#             taskTypes.append(taskType)
 
-    taskStatuses = gazu.task.all_task_statuses()
+#     taskStatuses = gazu.task.all_task_statuses()
 
-    tp = TaskPicker.TaskPicker(core=self.core,
-                               doStatus=doStatus,
-                               taskTypes_dicts=taskTypes,
-                               taskStatuses_dicts=taskStatuses)
-    tp.exec_()
+#     tp = TaskPicker.TaskPicker(core=self.core,
+#                                doStatus=doStatus,
+#                                taskTypes_dicts=taskTypes,
+#                                taskStatuses_dicts=taskStatuses)
+#     tp.exec_()
 
-    if tp.picked_data is None:
-        QMessageBox.warning(
-            self.core.messageParent,
-            "Kitsu Publish",
-            "Publishing canceled"
-        )
+#     if tp.picked_data is None:
+#         QMessageBox.warning(
+#             self.core.messageParent,
+#             "Kitsu Publish",
+#             "Publishing canceled"
+#         )
 
-    return tp.picked_data
+#     return tp.picked_data
