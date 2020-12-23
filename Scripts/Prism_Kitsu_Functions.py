@@ -56,6 +56,11 @@ if sys.version[0] == "3":
 else:
     pVersion = 2
 
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger("Kitsu Plugin")
+
 from PrismUtils.Decorators import err_catcher_plugin as err_catcher
 
 modulePath = os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file__))), "external_modules")
@@ -81,6 +86,7 @@ class Prism_Kitsu_Functions(object):
     def registerCallbacks(self):
         self.callbacks.append(self.core.registerCallback("projectBrowser_getAssetMenu", self.projectBrowser_getAssetMenu))
         self.callbacks.append(self.core.registerCallback("projectBrowser_getShotMenu", self.projectBrowser_getShotMenu))
+        self.callbacks.append(self.core.registerCallback("postPlayblast", self.onPostPlayblast))
 
     @err_catcher(name=__name__)
     def unregister(self):
@@ -96,6 +102,10 @@ class Prism_Kitsu_Functions(object):
     def onProjectChanged(self, origin):
         if hasattr(self, "kitsu"):
             del self.kitsu
+
+    @err_catcher(name=__name__)
+    def onPostPlayblast(self, state, scenfile, startframe, endframe, outputpath):
+        logger.debug("Playblast submited to kitsu")
 
     @err_catcher(name=__name__)
     def prismSettings_loadUI(self, origin):

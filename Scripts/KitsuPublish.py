@@ -56,7 +56,7 @@ if sys.version[0] == "3":
 else:
     pVersion = 2
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "ui"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "UserInterfaces"))
 if psVersion == 1:
     import KitsuPublish_ui
 else:
