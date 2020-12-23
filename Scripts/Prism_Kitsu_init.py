@@ -33,6 +33,7 @@
 
 from Prism_Kitsu_Variables import Prism_Kitsu_Variables
 from Prism_Kitsu_Functions import Prism_Kitsu_Functions
+from Prism_Kitsu_Utils_Functions import Prism_Kitsu_Utils_Functions
 
 
 class Prism_Kitsu(Prism_Kitsu_Variables, Prism_Kitsu_Functions):

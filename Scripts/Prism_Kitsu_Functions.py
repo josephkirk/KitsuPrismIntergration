@@ -62,6 +62,8 @@ modulePath = os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file
 if modulePath not in sys.path:
     sys.path.append(modulePath)
 
+from Prism_Kitsu_Utils_Functions import *
+
 class Prism_Kitsu_Functions(object):
     def __init__(self, core, plugin):
         self.core = core

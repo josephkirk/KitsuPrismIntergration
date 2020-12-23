@@ -13,70 +13,16 @@ except:
     from PySide.QtCore import *
     from PySide.QtGui import *
 
+from PrismUtils.Decorators import err_catcher_plugin as err_catcher
 
-from Prism_Kitsu_Tools_Functions import *
-
-
-def Connect(self, host, user, password, projectName):
-    """Log-in dialog to Kitsu"""
-
-    # Connect to server
-    if self.tokens is None:
-        try:
-            host = removeLastSlash(host)
-            host = host + "/api"
-            gazu.set_host(host)
-            if not gazu.client.host_is_up():
-                raise ConnectionError(
-                    "Could not connect to the server. Is the host URL correct?"
-                )
-        except Exception as exc:
-            QMessageBox.warning(QWidget(), str("Kitsu Error"), str(exc))
-            return "Connection error"
-
-        # Login
-        try:
-            self.tokens = gazu.log_in(user, password)
-
-        except:
-            message = (
-                "Login verification failed.\n"
-                "Please ensure your username and "
-                "password for Kitsu are correct.\n"
-            )
-
-            QMessageBox.warning(QWidget(), str("Kitsu Error"), str(message))
-            return "Connection error"
-
-    QMessageBox.warning(QWidget(), str("Kitsu Logged in"), str("Logged in"))
-
-    # Lastly, get the project dict and return it
-    project_dict = gazu.project.get_project_by_name(projectName)
-    return project_dict
-
-
+@err_catcher(name=__name__)
 def removeLastSlash(adress):
     if adress[-1:] == "/":
         adress = adress[:-1]
 
     return adress
 
-
-def GetUrl(obj_id, section):
-
-    # Get projAdress
-    if section == "project":
-        url = gazu.project.get_project_url(obj_id, "shots")
-    elif section == "shot":
-        obj_dict = gazu.shot.get_shot(obj_id)
-        url = gazu.shot.get_shot_url(obj_dict)
-    elif section == "asset":
-        obj_dict = gazu.asset.get_asset(obj_id)
-        url = gazu.asset.get_asset_url(obj_dict)
-
-    return url
-
-
+@err_catcher(name=__name__)
 def GetEpisodes(project_dict, user=False):
     if user:
         episodes = gazu.user.all_episodes_for_project(project_dict)
@@ -85,11 +31,11 @@ def GetEpisodes(project_dict, user=False):
 
     return episodes
 
-
+@err_catcher(name=__name__)
 def RemoveEpisode(episode_dict):
     return gazu.shot.remove_episode(episode_dict)
 
-
+@err_catcher(name=__name__)
 def GetSequences(dict, where="from_project", user=False):
     sequences = None
     if user:
@@ -105,11 +51,11 @@ def GetSequences(dict, where="from_project", user=False):
 
     return sequences
 
-
+@err_catcher(name=__name__)
 def RemoveSequence(sequence_dict):
     return gazu.shot.remove_sequence(sequence_dict)
 
-
+@err_catcher(name=__name__)
 def GetShots(dict, where="from_sequence", user=False, getCanceled=False):
     shots = None
 
@@ -129,11 +75,11 @@ def GetShots(dict, where="from_sequence", user=False, getCanceled=False):
 
     return shots
 
-
+@err_catcher(name=__name__)
 def RemoveShot(shot_dict):
     return gazu.shot.remove_shot(shot_dict)
 
-
+@err_catcher(name=__name__)
 def GetAssets(proj_dict, asset_type, user=False, getCanceled=False):
     if user:
         assets = gazu.user.all_assets_for_asset_type_and_project(
@@ -146,35 +92,36 @@ def GetAssets(proj_dict, asset_type, user=False, getCanceled=False):
 
     return assets
 
-
+@err_catcher(name=__name__)
 def RemoveAsset(asset_dict):
     return gazu.asset.remove_asset(asset_dict)
 
-
+@err_catcher(name=__name__)
 def GetAssetType(asset_type_id, user=False):
     assetType = gazu.asset.get_asset_type(asset_type_id)
     return assetType
 
-
+@err_catcher(name=__name__)
 def RemoveAssetType(asset_type_dict):
     return gazu.asset.remove_asset_type(asset_type_dict)
 
-
+@err_catcher(name=__name__)
 def GetAssetTypes():
     return gazu.asset.all_asset_types()
 
-
+@err_catcher(name=__name__)
 def GetEntity(id):
     entity = gazu.entity.get_entity(id)
     return entity
 
-
+@err_catcher(name=__name__)
 def GetEpisodeName(ep_id):
     epDict = gazu.entity.get_entity(ep_id)["name"]
     return epDict
 
 
 # returns created, updated
+@err_catcher(name=__name__)
 def DownloadThumbnail(self, name, preview_file_id, folder_name):
     local_preview_id = self.core.getConfig(
         name, "thumbnailID", config=folder_name.lower()
@@ -196,7 +143,7 @@ def DownloadThumbnail(self, name, preview_file_id, folder_name):
             if file_exists is False or preview_file_id != local_preview_id:
                 # Download the file
                 extension = (gazu.files.get_preview_file(preview_file_id)
-                             ["extension"])
+                            ["extension"])
                 thumbnailPath = previewImgPath + "." + extension
                 # Make path if it doesn't exist yet
                 mkdir_p(
@@ -223,7 +170,7 @@ def DownloadThumbnail(self, name, preview_file_id, folder_name):
 
     return False, False, False
 
-
+@err_catcher(name=__name__)
 def createKitsuEpisode(project_dict, episode_name):
     """
     returns
@@ -240,7 +187,7 @@ def createKitsuEpisode(project_dict, episode_name):
     else:
         return episode_dict, False
 
-
+@err_catcher(name=__name__)
 def createKitsuSequence(project_dict, sequence_name, episode_dict):
     """
     returns
@@ -250,26 +197,26 @@ def createKitsuSequence(project_dict, sequence_name, episode_dict):
 
     if episode_dict is None:
         sequence_dict = gazu.shot.get_sequence_by_name(project_dict,
-                                                       sequence_name)
+                                                    sequence_name)
     else:
         sequence_dict = gazu.shot.get_sequence_by_name(project_dict,
-                                                       sequence_name,
-                                                       episode_dict)
+                                                    sequence_name,
+                                                    episode_dict)
 
     if sequence_dict is None:
         if episode_dict is None:
             sequence_dict = gazu.shot.new_sequence(project_dict,
-                                                   sequence_name)
+                                                sequence_name)
         else:
             sequence_dict = gazu.shot.new_sequence(project_dict,
-                                                   sequence_name,
-                                                   episode_dicts)
+                                                sequence_name,
+                                                episode_dicts)
         return sequence_dict, True
 
     else:
         return sequence_dict, False
 
-
+@err_catcher(name=__name__)
 def createKitsuShot(project_dict, sequence_dict, shot_name, ranges):
     """
     returns
@@ -281,22 +228,22 @@ def createKitsuShot(project_dict, sequence_dict, shot_name, ranges):
     if shot_dict is None:
         if ranges is not None:
             shot_dict = gazu.shot.new_shot(project=project_dict,
-                                           sequence=sequence_dict,
-                                           name=shot_name,
-                                           nb_frames=ranges[1] - ranges[0],
-                                           frame_in=ranges[0],
-                                           frame_out=ranges[1],
-                                           data={})
+                                        sequence=sequence_dict,
+                                        name=shot_name,
+                                        nb_frames=ranges[1] - ranges[0],
+                                        frame_in=ranges[0],
+                                        frame_out=ranges[1],
+                                        data={})
         else:
             shot_dict = gazu.shot.new_shot(project=project_dict,
-                                           sequence=sequence_dict,
-                                           name=shot_name,
-                                           data={})
+                                        sequence=sequence_dict,
+                                        name=shot_name,
+                                        data={})
         return shot_dict, True
     else:
         return shot_dict, False
 
-
+@err_catcher(name=__name__)
 def createKitsuAssetType(name):
     asset_type_dict = gazu.asset.get_asset_type_by_name(name)
     if asset_type_dict is None:
@@ -305,13 +252,13 @@ def createKitsuAssetType(name):
     else:
         return asset_type_dict, False
 
-
+@err_catcher(name=__name__)
 def createKitsuAsset(project_dict,
-                     asset_type_dict,
-                     asset_name,
-                     asset_description,
-                     extra_data={},
-                     episode=None):
+                    asset_type_dict,
+                    asset_name,
+                    asset_description,
+                    extra_data={},
+                    episode=None):
     """
     returns
         asset dict
@@ -332,24 +279,24 @@ def createKitsuAsset(project_dict,
     else:
         return asset_dict, False
 
-
+@err_catcher(name=__name__)
 def uploadThumbnail(entity_id, thumbnail_URL, task_type_dict, user_Email):
     uploadRevision(entity_id,
-                   thumbnail_URL,
-                   task_type_dict,
-                   user_Email,
-                   True)
+                thumbnail_URL,
+                task_type_dict,
+                user_Email,
+                True)
     entity_dict = gazu.entity.get_entity(entity_id)
     return entity_dict["preview_file_id"]
 
-
+@err_catcher(name=__name__)
 def uploadRevision(entity_id,
-                   thumbnail_URL,
-                   task_type_dict,
-                   type_status_dict,
-                   user_Email,
-                   set_preview,
-                   comment=""):
+                thumbnail_URL,
+                task_type_dict,
+                type_status_dict,
+                user_Email,
+                set_preview,
+                comment=""):
 
     entity_dict = gazu.entity.get_entity(entity_id)
     person_dict = gazu.person.get_person_by_email(user_Email)
@@ -361,20 +308,20 @@ def uploadRevision(entity_id,
         type_status_dict = gazu.task.get_task_status(task_dict)
 
     comment_dict = addComment(task_dict,
-                              type_status_dict,
-                              comment=comment,
-                              person=person_dict)
+                            type_status_dict,
+                            comment=comment,
+                            person=person_dict)
 
     preview_dict = gazu.task.add_preview(task_dict,
-                                         comment_dict,
-                                         thumbnail_URL)
+                                        comment_dict,
+                                        thumbnail_URL)
 
     if set_preview is True:
         gazu.task.set_main_preview(preview_dict)
 
     return preview_dict
 
-
+@err_catcher(name=__name__)
 def addComment(task, task_status="todo", comment="", person=None):
     if not isinstance(task_status, dict):
         if task_status is None:
@@ -387,7 +334,7 @@ def addComment(task, task_status="todo", comment="", person=None):
 
     return comment_dict
 
-
+@err_catcher(name=__name__)
 def getTaskTypes(dict=None):
     tasks = None
     if dict is None:
@@ -406,3 +353,202 @@ def getTaskTypes(dict=None):
         tasks = gazu.task.all_task_types()
 
     return tasks
+
+
+@err_catcher(name=__name__)
+def ReportUpdateInfo(self, created, updated, type):
+    # Check and report what got added or updated ##
+    if len(created) > 0 or len(updated) > 0:
+        msgString = ""
+        created.sort()
+        updated.sort()
+
+        if len(created) > 0:
+            msgString += "The following " + type + " were created:\n\n"
+
+            for i in created:
+                msgString += str(i) + "\n"
+
+        if len(created) > 0 and len(updated) > 0:
+            msgString += "\n\n"
+
+        if len(updated) > 0:
+            msgString += "The following " + type + " were updated:\n\n"
+
+            for i in updated:
+                msgString += str(i) + "\n"
+    else:
+        msgString = "No " + type + " were created or updated."
+
+    QMessageBox.information(self.core.messageParent, "Kitsu Sync", msgString)
+
+@err_catcher(name=__name__)
+def DownloadDescription(self, name, description, configName):
+    local_description = self.core.getConfig(
+        name,
+        "description",
+        config=configName
+    )
+
+    if description != local_description:
+        if local_description is None:  # Description got created
+            return description, True, False
+        else:  # Description got edited
+            return description, False, True
+
+    return False, False, False
+
+@err_catcher(name=__name__)
+def saveID(self, name, id, info_location):
+    oldID = getID(self, name, info_location)
+    if oldID != id:
+        self.core.setConfig(
+            cat=name,
+            param="objID",
+            val=id,
+            config=info_location.lower()
+        )
+
+@err_catcher(name=__name__)
+def removeID(self, name, info_location):
+    self.core.setConfig(
+        cat=name,
+        param="objID",
+        delete=True,
+        config=info_location.lower()
+    )
+    self.core.setConfig(
+        cat=name,
+        param="thumbnailID",
+        delete=True,
+        config=info_location.lower()
+    )
+
+@err_catcher(name=__name__)
+def getID(self, name, info_location):
+    obj_id = self.core.getConfig(cat=name,
+                                 param="objID",
+                                 config=info_location.lower())
+
+    return obj_id
+
+@err_catcher(name=__name__)
+def saveThumbnailID(self, name, id, info_location):
+    oldID = getID(self, name, info_location)
+    if oldID != id:
+        self.core.setConfig(
+            name,
+            "thumbnailID",
+            id,
+            config=info_location.lower()
+        )
+
+@err_catcher(name=__name__)
+def RemoveCanceled(entities):
+    nonCanceled = []
+    for entity in entities:
+        if not entity["canceled"]:
+            nonCanceled.append(entity)
+    return nonCanceled
+
+
+# Get Kitsu shots
+@err_catcher(name=__name__)
+def GetKitsuShots(self):
+    connected = self.connectToKitsu()
+    if connected is False:
+        return False
+
+    ksuShots = []
+
+    # Check if only should get user assigned objects
+    user_sync = self.core.getConfig("kitsu",
+                                    "usersync",
+                                    configPath=self.core.prismIni)
+
+
+    # Check if tv show, meaning we're also dealing with episodes
+    if self.project_dict["production_type"] == "tvshow":
+        episodes = GetEpisodes(self.project_dict, user=user_sync)
+        for episode in episodes:
+            sequences = GetSequences(
+                episode, "from_episode", user=user_sync)
+
+            for sequence in sequences:
+                shots = GetShots(sequence, "from_sequence", user=user_sync)
+
+                for shot in shots:
+                    shot["episode_name"] = episode["name"]
+                    ksuShots.append(shot)
+
+    else:  # meaning feature or short film
+        sequences = GetSequences(
+            self.project_dict, "from_project", user=user_sync)
+
+        for sequence in sequences:
+            shots = GetShots(sequence, "from_sequence", user=user_sync)
+
+            for shot in shots:
+                ksuShots.append(shot)
+
+    if len(ksuShots) == 0:
+        return False
+
+    ksuShots = RemoveCanceled(ksuShots)
+
+    return ksuShots
+
+
+# Get Kitsu shots
+@err_catcher(name=__name__)
+def GetKitsuAssets(self):
+    connected = self.connectToKitsu()
+    if connected is False:
+        return False
+
+    assetTypes = GetAssetTypes()
+    ksuAssets = []
+
+    # Check if only should get user assigned objects
+    user_sync = self.core.getConfig("kitsu",
+                                    "usersync",
+                                    configPath=self.core.prismIni)
+    for assetType in assetTypes:
+        assets = GetAssets(self.project_dict, assetType, user=user_sync)
+        for asset in assets:
+            ksuAssets.append(asset)
+    if len(ksuAssets) == 0:
+        return False
+    ksuAssets = RemoveCanceled(ksuAssets)
+
+    return ksuAssets
+
+@err_catcher(name=__name__)
+def getPublishTypeDict(self, pType, doStatus=False):
+    """
+    Get task types
+    Get task statses
+    """
+    taskTypes_dict = getTaskTypes()
+
+    taskTypes = []
+    for taskType in taskTypes_dict:
+        if taskType["for_shots"] == (pType == "Shot"):
+            taskTypes.append(taskType)
+
+    taskStatuses = gazu.task.all_task_statuses()
+
+    tp = TaskPicker.TaskPicker(core=self.core,
+                               doStatus=doStatus,
+                               taskTypes_dicts=taskTypes,
+                               taskStatuses_dicts=taskStatuses)
+    tp.exec_()
+
+    if tp.picked_data is None:
+        QMessageBox.warning(
+            self.core.messageParent,
+            "Kitsu Publish",
+            "Publishing canceled"
+        )
+
+    return tp.picked_data
