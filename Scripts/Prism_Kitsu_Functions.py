@@ -503,6 +503,10 @@ class Prism_Kitsu_Functions(object):
 
         createdAssets = []
         login_tokens, project_tokens = self.connectToKitsu()
+        if not all([project_tokens,login_tokens]):
+            msgString = "Project is not valid"
+            QMessageBox.information(self.core.messageParent, "Kitsu Sync Assets", msgString)
+            return
         import gazu
         from pathlib import Path
         assets = gazu.asset.all_assets_for_project(project_tokens)
