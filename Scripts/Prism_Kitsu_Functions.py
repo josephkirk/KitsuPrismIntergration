@@ -385,9 +385,7 @@ class Prism_Kitsu_Functions(object):
                 self.core.entities.getAssetNameFromPath(asset),
                 asset_description
             ))
-                
-
-            
+        return new_assets
 
 
     @err_catcher(name=__name__)
@@ -412,7 +410,7 @@ class Prism_Kitsu_Functions(object):
                 frame_out=shotRange[1], 
                 data={"metadata": self.core.getConfig("metadata", shot, config="shotinfo")}
                 ))
-            
+        return new_shots
             
 
     @err_catcher(name=__name__)
@@ -511,11 +509,21 @@ class Prism_Kitsu_Functions(object):
         from pathlib import Path
         assets = gazu.asset.all_assets_for_project(project_tokens)
         for asset in assets:
+            assetInfo = {}
             asset_name = asset.get("name")
+            # Process thumbnail
+            tmbID, created, updated = DownloadThumbnail(self,
+                                                        asset_name,
+                                                        assetData.get("preview_file_id"]),
+                                                        "Assetinfo")
+            if tmbID == "":
+                removeID(self, assetData["name"], "assetinfo")
+            elif tmbID is not False:
+                assetInfo["thumbnailID"] = tmbID
             asset_type = gazu.asset.get_asset_type(asset.get("entity_type_id")).get("name")
-            assetPath = Path(self.core.assetPath) / asset_type / asset_name
-            if not assetPath.exists():
-                self.core.entities.createEntity("asset", str(assetPath))
+            asset_path = Path(self.core.assetPath) / asset_type / asset_name
+            if not asset_path.exists():
+                self.core.entities.createEntity("asset", str(asset_path))
                 createdAssets.append(asset_name)
 
 
