@@ -3,6 +3,10 @@
 #####################################
 
 import os
+import sys
+import tempfile
+import shutil
+import ruamel.yaml as yaml
 import gazu
 
 try:
@@ -24,7 +28,7 @@ def mkdir_p(path):
     try:
         os.makedirs(path)
     except OSError as exc:  # Python >2.5
-        if exc.errno == errno.EEXIST and os.path.isdir(path):
+        if exc.error == error.EEXIST and os.path.isdir(path):
             pass
         else:
             raise
@@ -132,57 +136,6 @@ def GetEntity(id):
 def GetEpisodeName(ep_id):
     epDict = gazu.entity.get_entity(ep_id)["name"]
     return epDict
-
-
-# returns created, updated
-@err_catcher(name=__name__)
-def DownloadThumbnail(self, name, preview_file_id, folder_name):
-    local_preview_id = self.core.getConfig(
-        name, "thumbnailID", config=folder_name.lower()
-    )
-
-    if preview_file_id != local_preview_id:
-        previewImgPath = os.path.join(
-            os.path.dirname(self.core.prismIni),
-            folder_name,
-            "%s_preview" % name,
-        )
-        if preview_file_id is None:  # Thumbnail removed
-            if os.path.isfile(previewImgPath + ".jpg"):
-                os.remove(previewImgPath + ".jpg")
-            return "", False, True  # File updated
-
-        else:  # Thumbnail added or changed
-            file_exists = os.path.exists(previewImgPath + ".jpg")
-            if file_exists is False or preview_file_id != local_preview_id:
-                # Download the file
-                extension = (gazu.files.get_preview_file(preview_file_id)
-                            ["extension"])
-                thumbnailPath = previewImgPath + "." + extension
-                # Make path if it doesn't exist yet
-                mkdir_p(
-                    os.path.join(
-                        os.path.dirname(self.core.prismIni),
-                        folder_name
-                    )
-                )
-                gazu.files.download_preview_file_thumbnail(
-                    preview_file_id, thumbnailPath)
-                # If not jpg, convert it
-                if os.path.splitext(thumbnailPath)[1] != ".jpg":
-                    # Get image data
-                    pixmap = self.core.media.getPixmapFromPath(thumbnailPath)
-                    # Save the image as a jpg
-                    self.core.media.savePixmap(pixmap, previewImgPath + ".jpg")
-                    # Delete old file
-                    os.remove(thumbnailPath)
-
-            if file_exists:  # If file got updated
-                return preview_file_id, False, True
-            else:  # If file didn't exist
-                return preview_file_id, True, False
-
-    return False, False, False
 
 @err_catcher(name=__name__)
 def createKitsuEpisode(project_dict, episode_name):
@@ -464,78 +417,6 @@ def RemoveCanceled(entities):
         if not entity["canceled"]:
             nonCanceled.append(entity)
     return nonCanceled
-
-
-# Get Kitsu shots
-@err_catcher(name=__name__)
-def GetKitsuShots(self):
-    connected = self.connectToKitsu()
-    if connected is False:
-        return False
-
-    ksuShots = []
-
-    # Check if only should get user assigned objects
-    user_sync = self.core.getConfig("kitsu",
-                                    "usersync",
-                                    configPath=self.core.prismIni)
-
-
-    # Check if tv show, meaning we're also dealing with episodes
-    if self.project_dict["production_type"] == "tvshow":
-        episodes = GetEpisodes(self.project_dict, user=user_sync)
-        for episode in episodes:
-            sequences = GetSequences(
-                episode, "from_episode", user=user_sync)
-
-            for sequence in sequences:
-                shots = GetShots(sequence, "from_sequence", user=user_sync)
-
-                for shot in shots:
-                    shot["episode_name"] = episode["name"]
-                    ksuShots.append(shot)
-
-    else:  # meaning feature or short film
-        sequences = GetSequences(
-            self.project_dict, "from_project", user=user_sync)
-
-        for sequence in sequences:
-            shots = GetShots(sequence, "from_sequence", user=user_sync)
-
-            for shot in shots:
-                ksuShots.append(shot)
-
-    if len(ksuShots) == 0:
-        return False
-
-    ksuShots = RemoveCanceled(ksuShots)
-
-    return ksuShots
-
-
-# Get Kitsu shots
-@err_catcher(name=__name__)
-def GetKitsuAssets(self):
-    connected = self.connectToKitsu()
-    if connected is False:
-        return False
-
-    assetTypes = GetAssetTypes()
-    ksuAssets = []
-
-    # Check if only should get user assigned objects
-    user_sync = self.core.getConfig("kitsu",
-                                    "usersync",
-                                    configPath=self.core.prismIni)
-    for assetType in assetTypes:
-        assets = GetAssets(self.project_dict, assetType, user=user_sync)
-        for asset in assets:
-            ksuAssets.append(asset)
-    if len(ksuAssets) == 0:
-        return False
-    ksuAssets = RemoveCanceled(ksuAssets)
-
-    return ksuAssets
 
 # @err_catcher(name=__name__)
 # def getPublishTypeDict(self, pType, doStatus=False):

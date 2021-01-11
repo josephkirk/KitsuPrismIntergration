@@ -42,6 +42,9 @@
 
 import os
 import sys
+import tempfile
+import shutil
+import ruamel.yaml as yaml
 
 try:
     from PySide2.QtCore import *
@@ -75,6 +78,9 @@ class Prism_Kitsu_Functions(object):
         self.plugin = plugin
 
         self.callbacks = []
+        project_tokens = None
+        self.tokens = None
+        self.publish_type_dict = None
         self.registerCallbacks()
 
     @err_catcher(name=__name__)
@@ -128,6 +134,8 @@ class Prism_Kitsu_Functions(object):
         origin.e_prjmanPrjName = QLineEdit()
         origin.e_prjmanUserName = QLineEdit()
         origin.e_prjmanUserPassword = QLineEdit()
+        origin.chb_syncUserTasks = QCheckBox("Only sync user assigned tasks")
+        origin.chb_syncUserTasks.setChecked(True)
 
         lo_prjman.addWidget(origin.l_prjmanSite)
         lo_prjman.addWidget(origin.l_prjmanPrjName)
@@ -137,6 +145,7 @@ class Prism_Kitsu_Functions(object):
         lo_prjman.addWidget(origin.e_prjmanPrjName, 1, 1)
         lo_prjman.addWidget(origin.e_prjmanUserName, 2, 1)
         lo_prjman.addWidget(origin.e_prjmanUserPassword, 3, 1)
+        lo_prjman.addWidget(origin.chb_syncUserTasks, 4, 1)
 
         origin.w_prjSettings.layout().insertWidget(5, origin.gb_prjmanPrjIntegration)
         origin.groupboxes.append(origin.gb_prjmanPrjIntegration)
@@ -171,6 +180,10 @@ class Prism_Kitsu_Functions(object):
             if "projectname" in settings["kitsu"]:
                 origin.e_prjmanPrjName.setText(settings["kitsu"]["projectname"])
 
+            if "usersync" in settings["kitsu"]:
+                origin.chb_syncUserTasks.setChecked(
+                    settings["kitsu"]["usersync"])
+
         self.prismSettings_prjmanToggled(origin, origin.gb_prjmanPrjIntegration.isChecked())
 
     @err_catcher(name=__name__)
@@ -189,6 +202,7 @@ class Prism_Kitsu_Functions(object):
         settings["kitsu"]["active"] = origin.gb_prjmanPrjIntegration.isChecked()
         settings["kitsu"]["site"] = origin.e_prjmanSite.text()
         settings["kitsu"]["projectname"] = origin.e_prjmanPrjName.text()
+        settings["kitsu"]["usersync"] = origin.chb_syncUserTasks.isChecked()
 
 
     @err_catcher(name=__name__)
@@ -349,9 +363,10 @@ class Prism_Kitsu_Functions(object):
                 from qtazulite.widgets.login import Login
                 login_window = Login(host = api_host, user=prjmanUser, password=prjmanUserPassword)
                 login_window.logged_in.connect(self.prismSettings_saveLoginSettings)
-                login_window._exec()
+                login_window.exec_()
                 login_tokens = login_window.login_tokens
             project_tokens = gazu.project.get_project_by_name(prjmanName)
+
             return login_tokens, project_tokens
         except:
             raise
@@ -467,7 +482,7 @@ class Prism_Kitsu_Functions(object):
             sources=imgPaths,
             startFrame=sf,
         )
-        kitsup._exec()
+        kitsup.exec_()
 
     def openprjman(self, shotName=None, eType="Shot", assetPath=""):
         login_tokens, project_tokens = self.connectToKitsu()
@@ -512,9 +527,9 @@ class Prism_Kitsu_Functions(object):
             assetInfo = {}
             asset_name = asset.get("name")
             # Process thumbnail
-            tmbID, created, updated = DownloadThumbnail(self,
+            tmbID, created, updated = self.DownloadThumbnail(
                                                         asset_name,
-                                                        assetData.get("preview_file_id"]),
+                                                        assetData.get("preview_file_id"),
                                                         "Assetinfo")
             if tmbID == "":
                 removeID(self, assetData["name"], "assetinfo")
@@ -618,17 +633,260 @@ class Prism_Kitsu_Functions(object):
 
     @err_catcher(name=__name__)
     def prjmanShotsToLocal(self, origin):
-        # add code here
+        login_tokens, project_tokens = self.connectToKitsu()
+        ksuShots = self.GetKitsuShots()
+
+        if ksuShots is False:
+            QMessageBox.warning(
+                self.core.messageParent,
+                "Kitsu Sync",
+                "No shots on Kitsu were found",
+            )
+            return
+
+        createdShots = []
+        updatedShots = []
+        configInfo = {}
+        # Process all shots ##
+        for shotData in ksuShots:
+            shotInfo = {}
+
+            # Create shot folders ##
+            shotName = shotData["sequence_name"] + "-" + shotData["name"]
+
+            # Add episode name if exists
+            if "episode_name" in shotData:
+                shotName = shotData["episode_name"] + "." + shotName
+
+            # Create folder if it doesn't exist
+            if not os.path.exists(os.path.join(origin.sBasePath, shotName)):
+                self.core.entities.createEntity("shot", shotName)
+
+                createdShots.append(shotName)
+
+                shotInfo["objID"] = shotData["id"]
+
+            # As Kitsu allows you to write only one of the start frame and
+            # end frame we need to check them induvidually
+            frame_nudge = int(self.core.getConfig("kitsu",
+                                                  "setFirstFrameOne",
+                                                  configPath=self.core.prismIni) is True)
+            nb_frames = None
+            if shotData["nb_frames"] is not None:
+                nb_frames = int(shotData["nb_frames"])
+            frame_in = None
+            frame_out = None
+            if shotData["data"] is not None:
+                if "frame_in" in shotData["data"]:
+                    frame_in = int(shotData["data"]["frame_in"])
+                if "frame_out" in shotData["data"]:
+                    frame_out = int(shotData["data"]["frame_out"])
+
+            if frame_in is not None:
+                if frame_out is None:
+                    frame_out = frame_in + nb_frames
+            elif nb_frames is not None:
+                frame_in = frame_nudge
+                frame_out = nb_frames - 1 + frame_nudge
+
+            if frame_in is not None and frame_out is not None:
+                shotRange = self.core.getConfig("shotRanges",
+                                                shotName,
+                                                config="shotinfo")
+
+                prv_frame_in = None
+                prv_frame_out = None
+
+                if (isinstance(shotRange, (list, yaml.comments.CommentedSeq))
+                        and len(shotRange) == 2):
+                    prv_frame_in = int(shotRange[0])
+                    prv_frame_out = int(shotRange[1])
+
+                if (frame_in != prv_frame_in or frame_out != prv_frame_out):
+                    # Update to be connected to shot-name instead of shotRange
+                    self.core.setConfig(
+                        "shotRanges",
+                        shotName,
+                        [frame_in, frame_out],
+                        config="shotinfo"
+                    )
+
+                if (
+                    shotName not in createdShots
+                    and shotName not in updatedShots
+                    and (frame_in != prv_frame_in
+                         or frame_out != prv_frame_out)
+                ):
+                    updatedShots.append(shotName)
+
+            # Process thumbnail ##
+            tmbID, created, updated = self.DownloadThumbnail(
+                                                        shotName,
+                                                        shotData["preview_file_id"],
+                                                        "Shotinfo")
+            if tmbID == "":
+                removeID(self, shotName, "assetinfo")
+            elif tmbID is not None:
+                shotInfo["thumbnailID"] = tmbID
+
+            if (
+                shotName not in createdShots
+                and shotName not in updatedShots
+            ):
+                if created:
+                    createdShots.append(shotName)
+                elif updated:
+                    updatedShots.append(shotName)
+
+            # Add info to config array
+            configInfo[shotName] = shotInfo
+
+        if len(configInfo) > 0:
+            # Write information
+            self.core.setConfig(data=configInfo, config="shotinfo")
+
+        # Report what shots got added or updated
+        ReportUpdateInfo(self, createdShots, updatedShots, "shots")
+
+        # Check if we should do reverse sync
+        ignore_post_checks = self.core.getConfig("kitsu",
+                                                 "ignorepostchecks",
+                                                 configPath=self.core.prismIni)
+
+        if ignore_post_checks is False:
+
+            # Check for shots that does not exist on Kitsu ##
+            for i in os.walk(origin.sBasePath):
+                foldercont = i
+                break
+
+            shotnames = []
+            for shot_name in foldercont[1]:
+                if (not shot_name.startswith(
+                        "_") and shot_name not in self.core.entities.omittedEntities["shot"]):
+                    shotnames.append(shot_name)
+
+            localShots = []
+            for localName in shotnames:
+                localID = getID(self, localName, "shotinfo")
+                if localID is None:
+                    localShots.append(localName)
+
+            if len(localShots) > 0:
+                msg = QMessageBox(
+                    QMessageBox.Question,
+                    "Kitsu Sync",
+                    "Some local shots don't exist on Kitsu:\n"
+                    + "\n".join(localShots),
+                    parent=self.core.messageParent,
+                )
+                msg.addButton("Hide local shots", QMessageBox.YesRole)
+                msg.addButton("Add shots to Kitsu", QMessageBox.YesRole)
+                msg.addButton("Do nothing", QMessageBox.YesRole)
+                msg.addButton("Don't ask again", QMessageBox.YesRole)
+                action = msg.exec_()
+
+                if action == 0:
+                    noAccess = []
+                    for i in localShots:
+                        dstname = os.path.join(origin.sBasePath, "_" + i)
+                        if not os.path.exists(dstname):
+                            try:
+                                os.rename(
+                                    os.path.join(
+                                        origin.sBasePath,
+                                        i
+                                    ),
+                                    dstname
+                                )
+                            except Exception:
+                                noAccess.append(i)
+
+                    if len(noAccess) > 0:
+                        msgString = "Acces denied for:\n\n"
+
+                        for i in noAccess:
+                            msgString += i + "\n"
+
+                        QMessageBox.warning(
+                            self.core.messageParent, "Hide Shots", msgString
+                        )
+                elif action == 1:
+                    created_shots, updated_shots = self.createShots(localShots)
+                    # Report what shots got added or updated
+                    ReportUpdateInfo(self, created_shots,
+                                     updated_shots, "shots")
+                elif action == 3:
+                    QMessageBox.information(
+                        self.core.messageParent,
+                        "Kitsu",
+                        "You can undo this by unchecking \"Ignore post checks\" in the settings.",
+                    )
+                    self.core.setConfig("kitsu",
+                                        "ignorepostchecks",
+                                        True,
+                                        configPath=self.core.prismIni)
 
         origin.refreshShots()
 
     @err_catcher(name=__name__)
     def prjmanShotsToprjman(self, origin):
+        login_tokens, project_tokens = self.connectToKitsu()
         # add code here
+        for i in os.walk(origin.sBasePath):
+            foldercont = i
+            break
 
-        msgString = "No shots were created or updated."
+        self.core.entities.refreshOmittedEntities()
 
-        QMessageBox.information(self.core.messageParent, "Kitsu Sync", msgString)
+        shot_names = []
+        for shot_name in foldercont[1]:
+            if (not shot_name.startswith(
+                    "_") and shot_name not in self.core.entities.omittedEntities["shot"]):
+                shot_names.append(shot_name)
+
+        created_shots, updated_shots = self.createShots(shot_names)
+
+        # Report what shots got added or updated
+        ReportUpdateInfo(self, created_shots, updated_shots, "shots")
+
+        # Check if we should do reverse sync
+        ignore_post_checks = self.core.getConfig("kitsu",
+                                                 "ignorepostchecks",
+                                                 configPath=self.core.prismIni)
+
+        if ignore_post_checks is False:
+
+            # Time to check if Kitsu has some shots we don't have
+            # Get kitsu shots
+            ksuShots = self.GetKitsuShots()
+
+            if ksuShots is not False:
+                externalShots = []
+                # Process all shots ##
+                for shotData in ksuShots:
+                    # Create shot folders ##
+                    shotName = shotData["sequence_name"] + \
+                        "-" + shotData["name"]
+
+                    localID = getID(self, shotName, "Shotinfo")
+                    if localID is None:
+                        externalShots.append(shotName)
+
+                if len(externalShots) > 0:
+                    msg = QMessageBox(
+                        QMessageBox.Question,
+                        "Kitsu Sync",
+                        "Some Kitsu shots don't exist locally:\n"
+                        + "\n".join(externalShots),
+                        parent=self.core.messageParent,
+                    )
+                    msg.addButton("Sync Kitsu shots", QMessageBox.YesRole)
+                    msg.addButton("Do nothing", QMessageBox.YesRole)
+                    action = msg.exec_()
+
+                    if action == 0:
+                        self.ksuShotsToLocal(origin)
 
     @err_catcher(name=__name__)
     def onProjectBrowserClose(self, origin):
@@ -639,4 +897,300 @@ class Prism_Kitsu_Functions(object):
         pass
 
 
+    @ err_catcher(name=__name__)
+    def createAssets(self, assets):
+        login_tokens, project_tokens = self.connectToKitsu()
+        if not login_tokens:
+            return [], []
 
+        created_assets = []
+        updated_assets = []
+        configInfo = {}
+        for asset_location in assets:
+            assetInfo = {}
+            # Remove pre-folder path and remove first character
+            # before os.sep split and remove last object as it's
+            # the name of the asset
+            aBasePath = self.core.getAssetPath()
+            asset_location = asset_location.replace(aBasePath, "")
+            splits = asset_location[1:].split(os.sep)[:-1]
+
+            # If not in any subfolder, assign to the empty asset-type
+            if len(splits) == 0:
+                splits.append("")
+
+            asset_name = os.path.basename(asset_location)
+            asset_type_name = splits[0]
+
+            asset_description = self.core.getConfig(asset_name,
+                                                    "description",
+                                                    config="assetinfo")
+
+            # If asset has subfolders, add to asset_description
+            if len(splits) > 1:
+                asset_description = "/".join(splits[1:]) + \
+                    " - " + asset_description
+
+            # Get preview image
+            previewImgPath = os.path.join(os.path.dirname(self.core.prismIni),
+                                          "Assetinfo",
+                                          "%s_preview.jpg" % asset_name,
+                                          )
+            thumbnailURL = previewImgPath if os.path.exists(
+                previewImgPath) else None
+
+            asset_type_dict, created_asset_type = createKitsuAssetType(
+                asset_type_name)
+
+            asset_dict, created_asset = createKitsuAsset(project_tokens,
+                                                         asset_type_dict,
+                                                         asset_name,
+                                                         asset_description,
+                                                         extra_data={},
+                                                         episode=None)
+
+            # Add thumbnail if preview image exists
+            if thumbnailURL is not None and created_asset:
+                while True:
+                    # Get task type dict
+                    if self.publish_type_dict is None:
+                        self.publish_type_dict = getPublishTypeDict(self,
+                                                                    "Asset")
+                        if self.publish_type_dict is None:
+                            if created_asset:
+                                RemoveAsset(asset_dict)
+                            if created_asset_type:
+                                RemoveAssetType(asset_type_dict)
+                            break
+
+                    user_email = self.core.getConfig("kitsu", "username")
+
+                    # Ask user to pick task to add thumbnail to
+                    thumbnail_id = uploadThumbnail(
+                        asset_dict["id"],
+                        thumbnailURL,
+                        self.publish_type_dict,
+                        user_email
+                    )
+                    assetInfo["thumbnailID"] = thumbnail_id
+                    break
+
+            # Write out ID to config
+            if created_asset:
+                assetInfo["objID"] = asset_dict["id"]
+                created_assets.append(asset_name)
+                # Add info to config array
+                configInfo[asset_name] = assetInfo
+
+        if len(configInfo) > 0:
+            # Write information
+            self.core.setConfig(data=configInfo, config="assetinfo")
+
+        # Clear the publishing type dict
+        self.publish_type_dict = None
+
+        return created_assets, updated_assets
+
+    @ err_catcher(name=__name__)
+    def createShots(self, shots):
+        login_tokens, project_tokens = self.connectToKitsu()
+
+        created_shots = []
+        updated_shots = []
+        configInfo = {}
+        for shot_name in shots:
+            shotInfo = {}
+            # Get range
+            shotRanges = self.core.getConfig("shotRanges",
+                                             shot_name,
+                                             config="shotinfo"
+                                             )
+
+            # Get preview image
+            previewImgPath = os.path.join(os.path.dirname(self.core.prismIni),
+                                          "Shotinfo",
+                                          "%s_preview.jpg" % shot_name,
+                                          )
+
+            # Split names
+            shotName, seqName = self.core.entities.splitShotname(shot_name)
+            if project_tokens["production_type"] == "tvshow":
+                epName, seqName = seqName.split(".", 1)
+            else:
+                epName = None
+
+            thumbnailURL = previewImgPath if os.path.exists(
+                previewImgPath) else None
+
+            episode_dict, created_ep = createKitsuEpisode(project_tokens,
+                                                          epName)
+            sequence_dict, created_seq = createKitsuSequence(project_tokens,
+                                                             seqName,
+                                                             episode_dict)
+            shot_dict, created_shot = createKitsuShot(project_tokens,
+                                                      sequence_dict,
+                                                      shotName,
+                                                      shotRanges)
+
+            # Add thumbnail if preview image exists
+            if thumbnailURL is not None and created_shot:
+                while True:
+                    # Get task type dict
+                    if self.publish_type_dict is None:
+                        self.publish_type_dict = getPublishTypeDict(self,
+                                                                    "Shot")
+                        if self.publish_type_dict is None:
+                            if created_shot:
+                                RemoveShot(shot_dict)
+                                created_shot = False
+                            if created_seq:
+                                RemoveSequence(sequence_dict)
+                            if created_ep:
+                                RemoveEpisode(episode_dict)
+                            break
+
+                    user_email = self.core.getConfig("kitsu", "username")
+
+                    # Ask user to pick task to add thumbnail to
+                    thumbnail_id = uploadThumbnail(
+                        shot_dict["id"],
+                        thumbnailURL,
+                        self.publish_type_dict,
+                        user_email
+                    )
+                    shotInfo["thumbnailID"] = thumbnail_id
+                    break
+
+            # Write out ID to config
+            if created_shot:
+                shotInfo["objID"] = shot_dict["id"]
+                created_shots.append(shot_name)
+                # Add info to config array
+                configInfo[shot_name] = shotInfo
+
+        if len(configInfo) > 0:
+            # Write information
+            self.core.setConfig(data=configInfo, config="shotinfo")
+
+
+    # Get Kitsu shots
+    @err_catcher(name=__name__)
+    def GetKitsuShots(self):
+        login_tokens, project_tokens = self.connectToKitsu()
+
+        ksuShots = []
+
+        # Check if only should get user assigned objects
+        user_sync = self.core.getConfig("kitsu",
+                                        "usersync",
+                                        configPath=self.core.prismIni)
+
+
+        # Check if tv show, meaning we're also dealing with episodes
+        if project_tokens["production_type"] == "tvshow":
+            episodes = GetEpisodes(project_tokens, user=user_sync)
+            for episode in episodes:
+                sequences = GetSequences(
+                    episode, "from_episode", user=user_sync)
+
+                for sequence in sequences:
+                    shots = GetShots(sequence, "from_sequence", user=user_sync)
+
+                    for shot in shots:
+                        shot["episode_name"] = episode["name"]
+                        ksuShots.append(shot)
+
+        else:  # meaning feature or short film
+            sequences = GetSequences(
+                project_tokens, "from_project", user=user_sync)
+
+            for sequence in sequences:
+                shots = GetShots(sequence, "from_sequence", user=user_sync)
+
+                for shot in shots:
+                    ksuShots.append(shot)
+
+        if len(ksuShots) == 0:
+            return False
+
+        ksuShots = RemoveCanceled(ksuShots)
+
+        return ksuShots
+
+
+    # Get Kitsu shots
+    @err_catcher(name=__name__)
+    def GetKitsuAssets(self):
+        login_tokens, project_tokens = self.connectToKitsu()
+
+        assetTypes = GetAssetTypes()
+        ksuAssets = []
+
+        # Check if only should get user assigned objects
+        user_sync = self.core.getConfig("kitsu",
+                                        "usersync",
+                                        configPath=self.core.prismIni)
+        for assetType in assetTypes:
+            assets = GetAssets(project_tokens, assetType, user=user_sync)
+            for asset in assets:
+                ksuAssets.append(asset)
+        if len(ksuAssets) == 0:
+            return False
+        ksuAssets = RemoveCanceled(ksuAssets)
+
+        return ksuAssets
+
+    # returns created, updated
+    @err_catcher(name=__name__)
+    def DownloadThumbnail(self, name, preview_file_id, folder_name):
+        local_preview_id = self.core.getConfig(
+            name, "thumbnailID", config=folder_name.lower()
+        )
+
+        if preview_file_id != local_preview_id:
+            previewImgPath = os.path.join(
+                os.path.dirname(self.core.prismIni),
+                folder_name,
+                "%s_preview" % name,
+            )
+            if preview_file_id is None:  # Thumbnail removed
+                if os.path.isfile(previewImgPath + ".jpg"):
+                    os.remove(previewImgPath + ".jpg")
+                return "", False, True  # File updated
+
+            else:  # Thumbnail added or changed
+                file_exists = os.path.exists(previewImgPath + ".jpg")
+                if file_exists is False or preview_file_id != local_preview_id:
+                    # Download the file
+                    extension = (gazu.files.get_preview_file(preview_file_id)
+                                ["extension"])
+                    thumbnailPath = previewImgPath + "." + extension
+                    # Make path if it doesn't exist yet
+                    
+                    parent_folder = (
+                        os.path.join(
+                            os.path.dirname(self.core.prismIni),
+                            folder_name
+                        )
+                    )
+
+                    if not os.path.exists(parent_folder):
+                        mkdir_p(parent_folder)
+                    
+                    gazu.files.download_preview_file_thumbnail(
+                        preview_file_id, thumbnailPath)
+                    # If not jpg, convert it
+                    if os.path.splitext(thumbnailPath)[1] != ".jpg":
+                        # Get image data
+                        pixmap = self.core.media.getPixmapFromPath(thumbnailPath)
+                        # Save the image as a jpg
+                        self.core.media.savePixmap(pixmap, previewImgPath + ".jpg")
+                        # Delete old file
+                        os.remove(thumbnailPath)
+
+                if file_exists:  # If file got updated
+                    return preview_file_id, False, True
+                else:  # If file didn't exist
+                    return preview_file_id, True, False
+
+        return False, False, False
