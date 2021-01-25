@@ -66,11 +66,11 @@ logger = logging.getLogger("Kitsu Plugin")
 
 from PrismUtils.Decorators import err_catcher_plugin as err_catcher
 
-modulePath = os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file__))), "external_modules")
-if modulePath not in sys.path:
-    sys.path.append(modulePath)
-
+import add_external_folders
+import gazu
 from Prism_Kitsu_Utils_Functions import *
+from Prism_Kitsu_Utils_Functions import createKitsuShot, createKitsuSequence
+import TaskPicker
 
 class Prism_Kitsu_Functions(object):
     def __init__(self, core, plugin):
@@ -219,23 +219,23 @@ class Prism_Kitsu_Functions(object):
 
             prjmanMenu.addSeparator()
 
-            actSSL = QAction("Kitsu assets to local", origin)
-            actSSL.triggered.connect(lambda: self.prjmanAssetsToLocal(origin))
-            prjmanMenu.addAction(actSSL)
+            actA2Local = QAction("Kitsu assets to local", origin)
+            actA2Local.triggered.connect(lambda: self.prjmanAssetsToLocal(origin))
+            prjmanMenu.addAction(actA2Local)
 
-            actSSL = QAction("Local assets to Kitsu", origin)
-            actSSL.triggered.connect(lambda: self.prjmanAssetsToprjman(origin))
-            prjmanMenu.addAction(actSSL)
+            actLocal2projman = QAction("Local assets to Kitsu", origin)
+            actLocal2projman.triggered.connect(lambda: self.prjmanAssetsToprjman(origin))
+            prjmanMenu.addAction(actLocal2projman)
 
             prjmanMenu.addSeparator()
 
-            actSSL = QAction("Kitsu shots to local", origin)
-            actSSL.triggered.connect(lambda: self.prjmanShotsToLocal(origin))
-            prjmanMenu.addAction(actSSL)
+            actprojmanS2Local = QAction("Kitsu shots to local", origin)
+            actprojmanS2Local.triggered.connect(lambda: self.prjmanShotsToLocal(origin))
+            prjmanMenu.addAction(actprojmanS2Local)
 
-            actLSS = QAction("Local shots to Kitsu", origin)
-            actLSS.triggered.connect(lambda: self.prjmanShotsToprjman(origin))
-            prjmanMenu.addAction(actLSS)
+            actLocalS2projman = QAction("Local shots to Kitsu", origin)
+            actLocalS2projman.triggered.connect(lambda: self.prjmanShotsToprjman(origin))
+            prjmanMenu.addAction(actLocalS2projman)
 
             return prjmanMenu
 
@@ -529,10 +529,10 @@ class Prism_Kitsu_Functions(object):
             # Process thumbnail
             tmbID, created, updated = self.DownloadThumbnail(
                                                         asset_name,
-                                                        assetData.get("preview_file_id"),
+                                                        asset.get("preview_file_id"),
                                                         "Assetinfo")
             if tmbID == "":
-                removeID(self, assetData["name"], "assetinfo")
+                removeID(self, asset["name"], "assetinfo")
             elif tmbID is not False:
                 assetInfo["thumbnailID"] = tmbID
             asset_type = gazu.asset.get_asset_type(asset.get("entity_type_id")).get("name")
@@ -636,7 +636,7 @@ class Prism_Kitsu_Functions(object):
         login_tokens, project_tokens = self.connectToKitsu()
         ksuShots = self.GetKitsuShots()
 
-        if ksuShots is False:
+        if not ksuShots:
             QMessageBox.warning(
                 self.core.messageParent,
                 "Kitsu Sync",
@@ -836,7 +836,6 @@ class Prism_Kitsu_Functions(object):
         for i in os.walk(origin.sBasePath):
             foldercont = i
             break
-
         self.core.entities.refreshOmittedEntities()
 
         shot_names = []
@@ -897,7 +896,7 @@ class Prism_Kitsu_Functions(object):
         pass
 
 
-    @ err_catcher(name=__name__)
+    @err_catcher(name=__name__)
     def createAssets(self, assets):
         login_tokens, project_tokens = self.connectToKitsu()
         if not login_tokens:
@@ -991,7 +990,7 @@ class Prism_Kitsu_Functions(object):
 
         return created_assets, updated_assets
 
-    @ err_catcher(name=__name__)
+    @err_catcher(name=__name__)
     def createShots(self, shots):
         login_tokens, project_tokens = self.connectToKitsu()
 
@@ -1027,13 +1026,14 @@ class Prism_Kitsu_Functions(object):
             sequence_dict, created_seq = createKitsuSequence(project_tokens,
                                                              seqName,
                                                              episode_dict)
-            shot_dict, created_shot = createKitsuShot(project_tokens,
+            shot_dict, created_shot, isUpdated = createKitsuShot(project_tokens,
                                                       sequence_dict,
                                                       shotName,
                                                       shotRanges)
 
+            thumbnailURL = None # force no preview
             # Add thumbnail if preview image exists
-            if thumbnailURL is not None and created_shot:
+            if thumbnailURL is not None and (created_shot or isUpdated):
                 while True:
                     # Get task type dict
                     if self.publish_type_dict is None:
@@ -1067,16 +1067,19 @@ class Prism_Kitsu_Functions(object):
                 created_shots.append(shot_name)
                 # Add info to config array
                 configInfo[shot_name] = shotInfo
+            elif isUpdated:
+                updated_shots.append(shot_name)
 
         if len(configInfo) > 0:
             # Write information
             self.core.setConfig(data=configInfo, config="shotinfo")
-
+        return created_shots, updated_shots
 
     # Get Kitsu shots
     @err_catcher(name=__name__)
-    def GetKitsuShots(self):
-        login_tokens, project_tokens = self.connectToKitsu()
+    def GetKitsuShots(self, project_tokens={}):
+        if not project_tokens:
+            login_tokens, project_tokens = self.connectToKitsu()
 
         ksuShots = []
 
@@ -1109,9 +1112,6 @@ class Prism_Kitsu_Functions(object):
 
                 for shot in shots:
                     ksuShots.append(shot)
-
-        if len(ksuShots) == 0:
-            return False
 
         ksuShots = RemoveCanceled(ksuShots)
 

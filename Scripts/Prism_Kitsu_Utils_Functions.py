@@ -6,6 +6,7 @@ import os
 import sys
 import tempfile
 import shutil
+import TaskPicker
 import ruamel.yaml as yaml
 import gazu
 
@@ -191,8 +192,7 @@ def createKitsuShot(project_dict, sequence_dict, shot_name, ranges):
         If created new shot
     """
     shot_dict = gazu.shot.get_shot_by_name(sequence_dict, shot_name)
-
-    if shot_dict is None:
+    if not shot_dict:
         if ranges is not None:
             shot_dict = gazu.shot.new_shot(project=project_dict,
                                         sequence=sequence_dict,
@@ -206,9 +206,15 @@ def createKitsuShot(project_dict, sequence_dict, shot_name, ranges):
                                         sequence=sequence_dict,
                                         name=shot_name,
                                         data={})
-        return shot_dict, True
+        return shot_dict, True, False
     else:
-        return shot_dict, False
+        if ranges:
+            shot_dict["data"]["frame_in"] = ranges[0]
+            shot_dict["data"]["frame_out"] = ranges[1]
+            shot_dict["nb_frames"] = ranges[1] - ranges[0]
+            gazu.shot.update_shot(shot_dict)
+        return shot_dict, False, True
+    return shot_dict, False, False
 
 @err_catcher(name=__name__)
 def createKitsuAssetType(name):
@@ -251,6 +257,7 @@ def uploadThumbnail(entity_id, thumbnail_URL, task_type_dict, user_Email):
     uploadRevision(entity_id,
                 thumbnail_URL,
                 task_type_dict,
+                None,
                 user_Email,
                 True)
     entity_dict = gazu.entity.get_entity(entity_id)
@@ -418,32 +425,32 @@ def RemoveCanceled(entities):
             nonCanceled.append(entity)
     return nonCanceled
 
-# @err_catcher(name=__name__)
-# def getPublishTypeDict(self, pType, doStatus=False):
-#     """
-#     Get task types
-#     Get task statses
-#     """
-#     taskTypes_dict = getTaskTypes()
+@err_catcher(name=__name__)
+def getPublishTypeDict(self, pType, doStatus=False):
+    """
+    Get task types
+    Get task statses
+    """
+    taskTypes_dict = getTaskTypes()
 
-#     taskTypes = []
-#     for taskType in taskTypes_dict:
-#         if taskType["for_shots"] == (pType == "Shot"):
-#             taskTypes.append(taskType)
+    taskTypes = []
+    for taskType in taskTypes_dict:
+        if taskType["for_shots"] == (pType == "Shot"):
+            taskTypes.append(taskType)
 
-#     taskStatuses = gazu.task.all_task_statuses()
+    taskStatuses = gazu.task.all_task_statuses()
 
-#     tp = TaskPicker.TaskPicker(core=self.core,
-#                                doStatus=doStatus,
-#                                taskTypes_dicts=taskTypes,
-#                                taskStatuses_dicts=taskStatuses)
-#     tp.exec_()
+    tp = TaskPicker.TaskPicker(core=self.core,
+                               doStatus=doStatus,
+                               taskTypes_dicts=taskTypes,
+                               taskStatuses_dicts=taskStatuses)
+    tp.exec_()
 
-#     if tp.picked_data is None:
-#         QMessageBox.warning(
-#             self.core.messageParent,
-#             "Kitsu Publish",
-#             "Publishing canceled"
-#         )
+    if tp.picked_data is None:
+        QMessageBox.warning(
+            self.core.messageParent,
+            "Kitsu Publish",
+            "Publishing canceled"
+        )
 
-#     return tp.picked_data
+    return tp.picked_data
