@@ -72,6 +72,14 @@ from Prism_Kitsu_Utils_Functions import *
 from Prism_Kitsu_Utils_Functions import createKitsuShot, createKitsuSequence
 import TaskPicker
 
+STEP2TASKTRANSLATE = {
+    "anm": "Animation",
+    "lay": "Layout",
+    "cmp": "Compositing",
+    "lgt": "Lighting",
+    "fx": "FX"
+}
+
 class Prism_Kitsu_Functions(object):
     def __init__(self, core, plugin):
         self.core = core
@@ -110,7 +118,16 @@ class Prism_Kitsu_Functions(object):
             del self.kitsu
 
     @err_catcher(name=__name__)
-    def onPostPlayblast(self, state, scenfile, startframe, endframe, outputpath):
+    def onPostPlayblast(self, state, scenefile, startframe, endframe, outputpath):
+        login_tokens, project_tokens = self.connectToKitsu()
+        task_name = kwargs["state"].l_taskName.text()
+        scenePath = kwargs["scenefile"]
+        infoPath = os.path.splitext(scenePath)[0] + "versioninfo.yml"
+        config = core.getConfig(configPath = infoPath)
+        entityName = config.get("entityName")
+        version = "{:04d}".format(int(config.get("version").replace("v","")))
+        step = STEP2TASKTRANSLATE.get(config.get("step")) or config.get("step")
+
         logger.debug("Playblast submited to kitsu")
 
     @err_catcher(name=__name__)
@@ -1194,3 +1211,44 @@ class Prism_Kitsu_Functions(object):
                     return preview_file_id, True, False
 
         return False, False, False
+
+    @ err_catcher(name=__name__)
+    def convertSeqToVideo(self, origin, temp_folder_name):
+        mediaPlayback = origin.mediaPlaybacks["shots"]
+        extension = ".mov"
+
+        inputpath = os.path.join(
+            mediaPlayback["basePath"], mediaPlayback["seq"][0]
+        ).replace("\\", "/")
+        inputExt = os.path.splitext(inputpath)[1]
+
+        outputpath = os.path.join(temp_folder_name,
+                                  os.path.splitext(mediaPlayback["seq"][0])[0]
+                                  + extension)
+
+        if mediaPlayback["prvIsSequence"]:
+            inputpath = os.path.splitext(inputpath)[0]
+            inputpath = inputpath[:-self.core.framePadding] + \
+                "%04d".replace("4", str(self.core.framePadding)) + inputExt
+
+        conversionSettings = {}
+        conversionSettings["-c"] = "prores"
+        conversionSettings["-profile"] = 2
+        conversionSettings["-pix_fmt"] = "yuv422p10le"
+
+        if mediaPlayback["prvIsSequence"]:
+            startNum = mediaPlayback["pstart"]
+        else:
+            startNum = 0
+            if inputExt == ".dpx":
+                conversionSettings["-start_number"] = None
+                conversionSettings["-start_number_out"] = None
+
+        self.core.media.convertMedia(
+            inputpath,
+            startNum,
+            outputpath,
+            settings=conversionSettings
+        )
+
+        return outputpath
