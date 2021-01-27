@@ -101,36 +101,44 @@ class Publish(QDialog, KitsuPublish_ui.Ui_dlg_kitsuPublish):
         # self.cb_status.append(self.task_types)
     @err_catcher(name=__name__)
     def updateStatus(self):
+        self.cb_status.clear()
         for status in gazu.task.all_task_statuses():
-            self.cb_status.append(status['name'], status)
+            self.cb_status.addItem(status['name'], status)
 
     @err_catcher(name=__name__)
-    def updateAssets(self):
+    def updateAssets(self, toggleStatus):
+        if not toggleStatus:
+            return
         self.data_token = gazu.asset.get_asset_by_name(self.project_tokens, self.current_shot)
         self.task_types = gazu.task.all_task_types_for_asset(self.data_token)
+        self.cb_shot.clear()
         for asset in gazu.asset.all_assets_for_project(self.project_tokens):
             asset = gazu.asset.get_asset(asset['id'])
             self.cb_shot.addItem(asset['name'], asset)
+        # self.cb_shot.setCurrentIndex(self.cb_shot.findText(shotname))
 
         self.updateStatus()
     
     @err_catcher(name=__name__)
-    def updateShots(self):
-        shot, sequence = self.core.entities.splitShotname(self.shotName)
-        self.sequence = gazu.shot.get_sequence_by_name(self.project_tokens, sequence)
-        self.shot = gazu.shot.get_shot_by_name(self.sequence, shot)
-        self.all_datas = [gazu.shot.get_shot(s.get('id')) for s in gazu.shot.all_shots_for_project(self.project_tokens)]
-        all_shotname = ["{}-{}".format(s.get("sequence_name"),s.get("name")) for s in self.all_datas]
-        self.cb_shot.addItems(all_shotname)
+    def updateShots(self, toggleStatus):
+        if not toggleStatus:
+            return
+        shotname, seqname = self.core.entities.splitShotname(self.shotName)
+        self.sequence = gazu.shot.get_sequence_by_name(self.project_tokens, seqname)
+        self.shot = gazu.shot.get_shot_by_name(self.sequence, shotname)
+        self.cb_shot.clear()
+        for shot in gazu.shot.all_shots_for_project(self.project_tokens):
+            shot = gazu.shot.get_shot(shot.get('id'))
+            self.cb_shot.addItem("{}-{}".format(shot.get("sequence_name"),shot.get("name"), shot))
         
-        self.cb_shot.setCurrentIndex(self.cb_shot.findText(shot))
-        self.task_types = gazu.task.all_task_types()
+        self.cb_shot.setCurrentIndex(self.cb_shot.findText(shotname))
+        # self.task_types = gazu.task.all_task_types()
         self.updateStatus()
 
     @err_catcher(name=__name__)
     def connectEvents(self):
-        self.rb_asset.pressed.connect(self.updateAssets)
-        self.rb_shot.pressed.connect(self.updateShots)
+        self.rb_asset.toggled.connect(self.updateAssets)
+        self.rb_shot.toggled.connect(self.updateShots)
     #     # 	self.b_addTask.clicked.connect(self.createTask)
     #     self.b_addTask.setVisible(False)
     #     self.cb_shot.activated.connect(self.updateTasks)
