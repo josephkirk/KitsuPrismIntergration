@@ -209,8 +209,11 @@ def createKitsuShot(project_dict, sequence_dict, shot_name, ranges):
         return shot_dict, True, False
     else:
         if ranges:
-            shot_dict["data"]["frame_in"] = ranges[0]
-            shot_dict["data"]["frame_out"] = ranges[1]
+            if not shot_dict.get("data"):
+                shot_dict["data"] = dict(frame_in= ranges[0], frame_out= ranges[1])
+            else:
+                shot_dict["data"]["frame_in"] = ranges[0]
+                shot_dict["data"]["frame_out"] = ranges[1]
             shot_dict["nb_frames"] = ranges[1] - ranges[0]
             gazu.shot.update_shot(shot_dict)
         return shot_dict, False, True
