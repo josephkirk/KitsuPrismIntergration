@@ -57,12 +57,18 @@ else:
     pVersion = 2
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "UserInterfaces"))
+
+from PrismUtils.Decorators import err_catcher_plugin as err_catcher
+
 if psVersion == 1:
     import KitsuPublish_ui
 else:
     import KitsuPublish_ui_ps2 as KitsuPublish_ui
 
-import gazu
+try:
+    import gazulite as gazu
+except:
+    import gazu
 
 from Prism_Kitsu_Utils_Functions import *
 
@@ -81,32 +87,50 @@ class Publish(QDialog, KitsuPublish_ui.Ui_dlg_kitsuPublish):
         self.fileSources = sources
         self.startFrame = startFrame
         self.shotList = {}
-        login_tokens, project_tokens = origin.connectToKitsu()
-        if not all([login_tokens, project_tokens]):
+        self.login_tokens, self.project_tokens = origin.connectToKitsu()
+        self.current_shot = shotName
+        self.connectEvents()
+        
+        
+        if not all([self.login_tokens, self.project_tokens]):
             return
         if ptype == "Asset":
-            self.data_token = gazu.asset.get_asset_by_name(project_tokens, shotName)
-            self.task_types = gazu.task.all_task_types_for_asset(self.data_token)
             self.rb_asset.setChecked(True)
         elif ptype == "Shot":
-            shot, sequence = core.entities.splitShotname(shotName)
-            self.sequence = gazu.shot.get_sequence_by_name(project_tokens, sequence)
-            self.shot = gazu.shot.get_shot_by_name(self.sequence, shot)
-            self.all_datas = [gazu.shot.get_shot(s.get('id')) for s in gazu.shot.all_shots_for_project(project_tokens)]
-            all_shotname = ["{}-{}".format(s.get("sequence_name"),s.get("name")) for s in self.all_datas]
-            self.cb_shot.addItems(all_shotname)
-            
-            # self.cb_shot.setCurrentIndex(self.cb_shot.findText(shotName.split("-")[-1]))
-            self.task_types = gazu.task.all_task_types()
             self.rb_shot.setChecked(True)
-            self.cb_status.addItems([i.get('name') for i in gazu.task.all_task_statuses()])
-        
         # self.cb_status.append(self.task_types)
+    @err_catcher(name=__name__)
+    def updateStatus(self):
+        for status in gazu.task.all_task_statuses():
+            self.cb_status.append(status['name'], status)
+
+    @err_catcher(name=__name__)
+    def updateAssets(self):
+        self.data_token = gazu.asset.get_asset_by_name(self.project_tokens, self.current_shot)
+        self.task_types = gazu.task.all_task_types_for_asset(self.data_token)
+        for asset in gazu.asset.all_assets_for_project(self.project_tokens):
+            asset = gazu.asset.get_asset(asset['id'])
+            self.cb_shot.addItem(asset['name'], asset)
+
+        self.updateStatus()
+    
+    @err_catcher(name=__name__)
+    def updateShots(self):
+        shot, sequence = self.core.entities.splitShotname(self.shotName)
+        self.sequence = gazu.shot.get_sequence_by_name(self.project_tokens, sequence)
+        self.shot = gazu.shot.get_shot_by_name(self.sequence, shot)
+        self.all_datas = [gazu.shot.get_shot(s.get('id')) for s in gazu.shot.all_shots_for_project(self.project_tokens)]
+        all_shotname = ["{}-{}".format(s.get("sequence_name"),s.get("name")) for s in self.all_datas]
+        self.cb_shot.addItems(all_shotname)
         
-    # @err_catcher(name=__name__)
-    # def connectEvents(self):
-    #     self.rb_asset.pressed.connect(self.updateShots)
-    #     self.rb_shot.pressed.connect(self.updateShots)
+        self.cb_shot.setCurrentIndex(self.cb_shot.findText(shot))
+        self.task_types = gazu.task.all_task_types()
+        self.updateStatus()
+
+    @err_catcher(name=__name__)
+    def connectEvents(self):
+        self.rb_asset.pressed.connect(self.updateAssets)
+        self.rb_shot.pressed.connect(self.updateShots)
     #     # 	self.b_addTask.clicked.connect(self.createTask)
     #     self.b_addTask.setVisible(False)
     #     self.cb_shot.activated.connect(self.updateTasks)

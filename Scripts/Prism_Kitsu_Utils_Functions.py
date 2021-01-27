@@ -215,9 +215,11 @@ def createKitsuShot(project_dict, sequence_dict, shot_name, ranges):
                 shot_dict["data"]["frame_in"] = ranges[0]
                 shot_dict["data"]["frame_out"] = ranges[1]
             shot_dict["nb_frames"] = ranges[1] - ranges[0]
-            gazu.shot.update_shot(shot_dict)
+            try:
+                gazu.shot.update_shot(shot_dict)
+            except Exception as why:
+                print("Try to update {} with exception:\n{}".format(shot_name, why))
         return shot_dict, False, True
-    return shot_dict, False, False
 
 @err_catcher(name=__name__)
 def createKitsuAssetType(name):
