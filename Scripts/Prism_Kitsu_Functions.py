@@ -518,7 +518,7 @@ class Prism_Kitsu_Functions(object):
         launch_url = base_url.replace("http://", "http://" + login_tokens.get("access_token") + "@")
         import subprocess
         if os.path.exists("C:/Temp/Chromium/chrome.exe"):
-            subprocess.Popen("C:/Temp/Chromium/chrome.exe {}".format(project_url))
+            subprocess.Popen("C:/Temp/Chromium/chrome.exe {}".format(launch_url))
         else:
             # pass
             import webbrowser
