@@ -37,3 +37,4 @@ class Prism_Kitsu_Variables(object):
         self.pluginName = "Kitsu"
         self.pluginType = "ProjectManager"
         self.platforms = ["Windows", "Linux", "Darwin"]
+        self.isExtendingStateManager = True
