@@ -695,9 +695,15 @@ class Prism_Kitsu_Functions(object):
             frame_out = None
             if shotData["data"] is not None:
                 if "frame_in" in shotData["data"]:
-                    frame_in = int(shotData["data"]["frame_in"])
+                    try:
+                        frame_in = int(shotData["data"]["frame_in"])
+                    except ValueError:
+                        frame_in = None
                 if "frame_out" in shotData["data"]:
-                    frame_out = int(shotData["data"]["frame_out"])
+                    try:
+                        frame_out = int(shotData["data"]["frame_out"])
+                    except ValueError:
+                        frame_out = None
 
             if frame_in is not None:
                 if frame_out is None:
