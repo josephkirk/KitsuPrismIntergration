@@ -68,8 +68,8 @@ from PrismUtils.Decorators import err_catcher_plugin as err_catcher
 
 import add_external_folders
 import gazu
+import box
 from Prism_Kitsu_Utils_Functions import *
-from Prism_Kitsu_Utils_Functions import createKitsuShot, createKitsuSequence
 import TaskPicker
 
 STEP2TASKTRANSLATE = {
@@ -77,7 +77,8 @@ STEP2TASKTRANSLATE = {
     "lay": "Layout",
     "cmp": "Compositing",
     "lgt": "Lighting",
-    "fx": "FX"
+    "fx": "FX",
+    "prv": "Previz"
 }
 
 class Prism_Kitsu_Functions(object):
@@ -101,6 +102,7 @@ class Prism_Kitsu_Functions(object):
         self.callbacks.append(self.core.registerCallback("projectBrowser_getAssetMenu", self.projectBrowser_getAssetMenu))
         self.callbacks.append(self.core.registerCallback("projectBrowser_getShotMenu", self.projectBrowser_getShotMenu))
         self.callbacks.append(self.core.registerCallback("postPlayblast", self.onPostPlayblast))
+        self.callbacks.append(self.core.registerCallback("postRender", self.onPostRender))
 
     @err_catcher(name=__name__)
     def unregister(self):
@@ -120,15 +122,28 @@ class Prism_Kitsu_Functions(object):
     @err_catcher(name=__name__)
     def onPostPlayblast(self, state, scenefile, startframe, endframe, outputpath):
         login_tokens, project_tokens = self.connectToKitsu()
-        task_name = kwargs["state"].l_taskName.text()
-        scenePath = kwargs["scenefile"]
-        infoPath = os.path.splitext(scenePath)[0] + "versioninfo.yml"
-        config = core.getConfig(configPath = infoPath)
-        entityName = config.get("entityName")
-        version = "{:04d}".format(int(config.get("version").replace("v","")))
-        step = STEP2TASKTRANSLATE.get(config.get("step")) or config.get("step")
-
+        data = self.core.entities.getScenefileData(scenefile)
+        task_name = state.l_taskName.text()
+        scenePath = scenefile
+        entityName = data.get("entityName")
+        version = data.get("version")
+        step = STEP2TASKTRANSLATE.get( data.get("step")) or  data.get("step")
+        comment = data.get("comment")
+        username = self.core.getConfig("globals", "username")
         logger.debug("Playblast submited to kitsu")
+
+    @err_catcher(name=__name__)
+    def onPostRender(self, state, scenefile, settings):
+        login_tokens, project_tokens = self.connectToKitsu()
+        data = self.core.entities.getScenefileData(scenefile)
+        task_name = state.l_taskName.text()
+        scenePath = scenefile
+        entityName = data.get("entityName")
+        version = data.get("version")
+        step = STEP2TASKTRANSLATE.get( data.get("step")) or  data.get("step")
+        comment = data.get("comment")
+        username = self.core.getConfig("globals", "username")
+        logger.debug("Render submited to kitsu")
 
     @err_catcher(name=__name__)
     def prismSettings_loadUI(self, origin):
@@ -598,6 +613,7 @@ class Prism_Kitsu_Functions(object):
                 asset.data.prism = Box()
                 asset.data.prism.path = str(asset_path)
                 info = self.core.getConfig(config="assetinfo", location=str(asset_path))
+                print(info)
                 asset.data.prism.assetInfo = self.core.getConfig(configPath=info)
                 gazu.asset.update_asset(asset)
                 updatedAssets.append(asset_name)
