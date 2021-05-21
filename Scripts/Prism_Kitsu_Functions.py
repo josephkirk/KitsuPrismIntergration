@@ -66,9 +66,13 @@ logger = logging.getLogger("Kitsu Plugin")
 
 from PrismUtils.Decorators import err_catcher_plugin as err_catcher
 
+modulePath = os.path.join(os.path.abspath(os.path.dirname(os.path.dirname(__file__))), "external_modules")
+if not modulePath in sys.path:
+    sys.path.append(modulePath)
+
 import add_external_folders
 import gazu
-import box
+# import box
 from Prism_Kitsu_Utils_Functions import *
 import TaskPicker
 
