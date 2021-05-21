@@ -136,10 +136,37 @@ class Publish(QDialog, KitsuPublish_ui.Ui_dlg_kitsuPublish):
         self.updateStatus()
 
     @err_catcher(name=__name__)
+    def publish(self):
+        # data = self.core.entities.getScenefileData(scenefile)
+        logger.info("Playblast submited to kitsu")
+
+        # entity_dict = gazu.entity.get_entity(entity_id)
+        # person_dict = gazu.person.get_person_by_email(user_Email)
+        # task_dict = gazu.task.get_task_by_name(entity_dict, task_type_dict)
+        # if task_dict is None:
+        #     task_dict = gazu.task.new_task(entity_dict, task_type_dict)
+
+        # if type_status_dict is None:
+        #     type_status_dict = gazu.task.get_task_status(task_dict)
+
+        # comment_dict = addComment(task_dict,
+        #                         type_status_dict,
+        #                         comment=comment,
+        #                         person=person_dict)
+
+        # preview_dict = gazu.task.add_preview(task_dict,
+        #                                     comment_dict,
+        #                                     thumbnail_URL)
+
+        # if set_preview is True:
+        # gazu.task.set_main_preview(preview_dict)
+
+    @err_catcher(name=__name__)
     def connectEvents(self):
         self.rb_asset.toggled.connect(self.updateAssets)
         self.rb_shot.toggled.connect(self.updateShots)
     #     # 	self.b_addTask.clicked.connect(self.createTask)
     #     self.b_addTask.setVisible(False)
     #     self.cb_shot.activated.connect(self.updateTasks)
-    #     self.b_sgPublish.clicked.connect(self.publish)
+        self.b_sgPublish.clicked.connect(self.publish)
+    
