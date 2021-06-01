@@ -100,6 +100,21 @@ class Prism_Kitsu_Functions(object):
     def isActive(self):
         return True
 
+    @property
+    def isPublishOnPlayblast(self):
+        return self._isPublishOnPlayblast
+
+    @property
+    def publishStatus(self):
+        return self._publishStatus
+
+    @err_catcher(name=__name__)
+    def setIsPublishOnPlayblast(self, value):
+        self._isPublishOnPlayblast = value
+
+    @err_catcher(name=__name__)
+    def setPublishStatus(self, value):
+        self._publishStatus = value
 
     @err_catcher(name=__name__)
     def registerCallbacks(self):
@@ -126,7 +141,11 @@ class Prism_Kitsu_Functions(object):
 
     @err_catcher(name=__name__)
     def onPostPlayblast(self, state, scenefile, startframe, endframe, outputpath):
-        login_tokens, project_tokens = self.connectToKitsu()
+        if not self.isPublishOnPlayblast:
+            return
+        login_tokens, project_tokens = self.connectToKitsu(raise_login_error=False)
+        if not (login_tokens and project_tokens):
+            return
         data = self.core.entities.getScenefileData(scenefile)
         task_name = state.l_taskName.text()
         scenePath = scenefile
@@ -139,7 +158,7 @@ class Prism_Kitsu_Functions(object):
 
     @err_catcher(name=__name__)
     def onPostRender(self, state, scenefile, settings):
-        login_tokens, project_tokens = self.connectToKitsu()
+        login_tokens, project_tokens = self.connectToKitsu(raise_login_error=False)
         data = self.core.entities.getScenefileData(scenefile)
         task_name = state.l_taskName.text()
         scenePath = scenefile
@@ -565,7 +584,7 @@ class Prism_Kitsu_Functions(object):
             assetInfo = {}
             asset_name = asset.get("name")
             # Process thumbnail
-            tmbID, created, updated = self.DownloadThumbnail(
+            tmbID, created, updated = self.downloadThumbnail(
                                                         asset_name,
                                                         asset.get("preview_file_id"),
                                                         "Assetinfo")
@@ -673,7 +692,7 @@ class Prism_Kitsu_Functions(object):
     @err_catcher(name=__name__)
     def prjmanShotsToLocal(self, origin):
         login_tokens, project_tokens = self.connectToKitsu()
-        ksuShots = self.GetKitsuShots()
+        ksuShots = self.getKitsuShots()
 
         if not ksuShots:
             QMessageBox.warning(
@@ -765,7 +784,7 @@ class Prism_Kitsu_Functions(object):
                     updatedShots.append(shotName)
 
             # Process thumbnail ##
-            tmbID, created, updated = self.DownloadThumbnail(
+            tmbID, created, updated = self.downloadThumbnail(
                                                         shotName,
                                                         shotData["preview_file_id"],
                                                         "Shotinfo")
@@ -903,7 +922,7 @@ class Prism_Kitsu_Functions(object):
 
             # Time to check if Kitsu has some shots we don't have
             # Get kitsu shots
-            ksuShots = self.GetKitsuShots()
+            ksuShots = self.getKitsuShots()
 
             if ksuShots is not False:
                 externalShots = []
@@ -941,14 +960,31 @@ class Prism_Kitsu_Functions(object):
         pass
 
     @err_catcher(name=__name__)
+    def updateStatus(self):
+        self.cb_status.clear()
+        for status in gazu.task.all_task_statuses():
+            self.cb_status.addItem(status['name'], status)
+
+    @err_catcher(name=__name__)
     def onStateCreated(self, origin, state, stateData):
+        self.connectToKitsu(raise_login_error=False)
         if hasattr(state, "gb_playblast"):
             wid = QGroupBox("Kitsu")
-            layout = QHBoxLayout()
+            layout = QVBoxLayout()
             wid.setLayout(layout)
             state.chb_publishToKitsu = QCheckBox("Publish To Kitsu")
             state.chb_publishToKitsu.setChecked(True)
+            state.chb_publishToKitsu.toggled.connect(self.setIsPublishOnPlayblast)
+            w_publishStatus = QWidget()
+            w_publishStatus.setLayout(QHBoxLayout())
+            w_publishStatus.layout().addWidget(QLabel("Publish Status: "))
+            state.chb_taskStatus = QComboBox()
+            for status in gazu.task.all_task_statuses():
+                state.chb_taskStatus.addItem(status['name'], status)
+            state.chb_taskStatus.currentTextChanged.connect(self.setPublishStatus)
+            w_publishStatus.layout().addWidget(state.chb_taskStatus)
             layout.addWidget(state.chb_publishToKitsu)
+            layout.addWidget(w_publishStatus)
             # layout.setContentsMargins(10,10,10,10)
             state.gb_playblast.layout().insertWidget(0, wid)
 
@@ -1133,7 +1169,7 @@ class Prism_Kitsu_Functions(object):
 
     # Get Kitsu shots
     @err_catcher(name=__name__)
-    def GetKitsuShots(self, project_tokens={}):
+    def getKitsuShots(self, project_tokens={}):
         if not project_tokens:
             login_tokens, project_tokens = self.connectToKitsu()
 
@@ -1176,7 +1212,7 @@ class Prism_Kitsu_Functions(object):
 
     # Get Kitsu shots
     @err_catcher(name=__name__)
-    def GetKitsuAssets(self):
+    def getKitsuAssets(self):
         login_tokens, project_tokens = self.connectToKitsu()
 
         assetTypes = GetAssetTypes()
@@ -1198,7 +1234,7 @@ class Prism_Kitsu_Functions(object):
 
     # returns created, updated
     @err_catcher(name=__name__)
-    def DownloadThumbnail(self, name, preview_file_id, folder_name):
+    def downloadThumbnail(self, name, preview_file_id, folder_name):
         local_preview_id = self.core.getConfig(
             name, "thumbnailID", config=folder_name.lower()
         )
