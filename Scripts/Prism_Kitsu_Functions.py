@@ -105,7 +105,8 @@ class Prism_Kitsu_Functions(object):
     def registerCallbacks(self):
         self.callbacks.append(self.core.registerCallback("projectBrowser_getAssetMenu", self.projectBrowser_getAssetMenu))
         self.callbacks.append(self.core.registerCallback("projectBrowser_getShotMenu", self.projectBrowser_getShotMenu))
-        self.callbacks.append(self.core.registerCallback("postPlayblast", self.onPostPlayblast))
+        self.callbacks.append(self.core.registerCallback("onStateCreated", self.onStateCreated))
+        self.callbacks.append(self.core.registerCallback("postRender", self.onPostRender))
         self.callbacks.append(self.core.registerCallback("postRender", self.onPostRender))
 
     @err_catcher(name=__name__)
@@ -383,7 +384,7 @@ class Prism_Kitsu_Functions(object):
             self.createprjmanShots([shotName])
 
     @err_catcher(name=__name__)
-    def connectToKitsu(self, user=True):
+    def connectToKitsu(self, user=True, raise_login_error=True):
         try:
             prjmanSite = self.core.getConfig("kitsu", "site", configPath=self.core.prismIni)
             prjmanUser = self.core.getConfig("kitsu", "username")
@@ -405,7 +406,8 @@ class Prism_Kitsu_Functions(object):
 
             return login_tokens, project_tokens
         except:
-            raise
+            if raise_login_error:
+                raise
             return None, None
 
     @err_catcher(name=__name__)
@@ -938,6 +940,17 @@ class Prism_Kitsu_Functions(object):
     def onSetProjectStartup(self, origin):
         pass
 
+    @err_catcher(name=__name__)
+    def onStateCreated(self, origin, state, stateData):
+        if hasattr(state, "gb_playblast"):
+            wid = QGroupBox("Kitsu")
+            layout = QHBoxLayout()
+            wid.setLayout(layout)
+            state.chb_publishToKitsu = QCheckBox("Publish To Kitsu")
+            state.chb_publishToKitsu.setChecked(True)
+            layout.addWidget(state.chb_publishToKitsu)
+            # layout.setContentsMargins(10,10,10,10)
+            state.gb_playblast.layout().insertWidget(0, wid)
 
     @err_catcher(name=__name__)
     def createAssets(self, assets):
