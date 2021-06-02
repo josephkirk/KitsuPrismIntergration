@@ -76,6 +76,10 @@ import gazu
 from Prism_Kitsu_Utils_Functions import *
 import TaskPicker
 
+
+IMAGETYPE = ["jpg", "png", "bmp", "exr"]
+MOVIETYPE = ["mov", "mp4", "mkv", "avi"]
+
 STEP2TASKTRANSLATE = {
     "anm": "Animation",
     "lay": "Layout",
@@ -84,6 +88,13 @@ STEP2TASKTRANSLATE = {
     "fx": "FX",
     "prv": "Previz"
 }
+
+
+def is_image_type(filetype):
+    return any(filetype.endswith(f) for f in IMAGETYPE)
+
+def is_movie_type(filetype):
+    return any(filetype.endswith(f) for f in MOVIETYPE)
 
 class Prism_Kitsu_Functions(object):
     def __init__(self, core, plugin):
@@ -121,7 +132,7 @@ class Prism_Kitsu_Functions(object):
         self.callbacks.append(self.core.registerCallback("projectBrowser_getAssetMenu", self.projectBrowser_getAssetMenu))
         self.callbacks.append(self.core.registerCallback("projectBrowser_getShotMenu", self.projectBrowser_getShotMenu))
         self.callbacks.append(self.core.registerCallback("onStateCreated", self.onStateCreated))
-        self.callbacks.append(self.core.registerCallback("postRender", self.onPostRender))
+        self.callbacks.append(self.core.registerCallback("postPlayblast", self.onPostPlayblast))
         self.callbacks.append(self.core.registerCallback("postRender", self.onPostRender))
 
     @err_catcher(name=__name__)
@@ -138,36 +149,6 @@ class Prism_Kitsu_Functions(object):
     def onProjectChanged(self, origin):
         if hasattr(self, "kitsu"):
             del self.kitsu
-
-    @err_catcher(name=__name__)
-    def onPostPlayblast(self, state, scenefile, startframe, endframe, outputpath):
-        if not self.isPublishOnPlayblast:
-            return
-        login_tokens, project_tokens = self.connectToKitsu(raise_login_error=False)
-        if not (login_tokens and project_tokens):
-            return
-        data = self.core.entities.getScenefileData(scenefile)
-        task_name = state.l_taskName.text()
-        scenePath = scenefile
-        entityName = data.get("entityName")
-        version = data.get("version")
-        step = STEP2TASKTRANSLATE.get( data.get("step")) or  data.get("step")
-        comment = data.get("comment")
-        username = self.core.getConfig("globals", "username")
-        logger.debug("Playblast submited to kitsu")
-
-    @err_catcher(name=__name__)
-    def onPostRender(self, state, scenefile, settings):
-        login_tokens, project_tokens = self.connectToKitsu(raise_login_error=False)
-        data = self.core.entities.getScenefileData(scenefile)
-        task_name = state.l_taskName.text()
-        scenePath = scenefile
-        entityName = data.get("entityName")
-        version = data.get("version")
-        step = STEP2TASKTRANSLATE.get( data.get("step")) or  data.get("step")
-        comment = data.get("comment")
-        username = self.core.getConfig("globals", "username")
-        logger.debug("Render submited to kitsu")
 
     @err_catcher(name=__name__)
     def prismSettings_loadUI(self, origin):
@@ -409,7 +390,6 @@ class Prism_Kitsu_Functions(object):
             prjmanUser = self.core.getConfig("kitsu", "username")
             prjmanUserPassword = self.core.getConfig("kitsu", "userpassword")
             prjmanName = self.core.getConfig("kitsu", "projectname", configPath=self.core.prismIni)
-            import gazu
             api_host= prjmanSite+"/api"
             gazu.set_host(api_host)
             from qtazulite import utils
@@ -437,7 +417,6 @@ class Prism_Kitsu_Functions(object):
 
     @err_catcher(name=__name__)
     def createprjmanAssets(self, assets=[]):
-        import gazu
         from pathlib import Path
         login_tokens, project_dict = self.connectToKitsu()
         new_assets = []
@@ -462,7 +441,6 @@ class Prism_Kitsu_Functions(object):
 
     @err_catcher(name=__name__)
     def createprjmanShots(self, shots=[]):
-        import gazu
         login_tokens, project_tokens = self.connectToKitsu()
         new_shots=[]
         for shot in shots:
@@ -543,7 +521,6 @@ class Prism_Kitsu_Functions(object):
 
     def openprjman(self, shotName=None, eType="Shot", assetPath=""):
         login_tokens, project_tokens = self.connectToKitsu()
-        import gazu
         if shotName:
             if eType == "Shot":
                 shotName, seqName = self.core.entities.splitShotname(shotName)
@@ -577,7 +554,6 @@ class Prism_Kitsu_Functions(object):
             msgString = "Project is not valid"
             QMessageBox.information(self.core.messageParent, "Kitsu Sync Assets", msgString)
             return
-        import gazu
         from pathlib import Path
         assets = gazu.asset.all_assets_for_project(project_tokens)
         for asset in assets:
@@ -973,6 +949,9 @@ class Prism_Kitsu_Functions(object):
             layout = QVBoxLayout()
             wid.setLayout(layout)
             state.chb_publishToKitsu = QCheckBox("Publish To Kitsu")
+            state.le_customKitsuPublishComment = QLineEdit()
+            state.le_customKitsuPublishComment.setPlaceholderText("Input Custom comment here ...")
+            state.chb_setPublishAsReview = QCheckBox("Set As Preview")
             state.chb_publishToKitsu.setChecked(True)
             state.chb_publishToKitsu.toggled.connect(self.setIsPublishOnPlayblast)
             w_publishStatus = QWidget()
@@ -985,8 +964,143 @@ class Prism_Kitsu_Functions(object):
             w_publishStatus.layout().addWidget(state.chb_taskStatus)
             layout.addWidget(state.chb_publishToKitsu)
             layout.addWidget(w_publishStatus)
+            layout.addWidget(state.le_customKitsuPublishComment)
             # layout.setContentsMargins(10,10,10,10)
             state.gb_playblast.layout().insertWidget(0, wid)
+
+
+    @err_catcher(name=__name__)
+    def onPostPlayblast(self, state, scenefile, startframe, endframe, outputpath):
+        if not state.chb_publishToKitsu.isChecked():
+            return
+        login_tokens, project_tokens = self.connectToKitsu(raise_login_error=False)
+        if not (login_tokens and project_tokens):
+            return
+        scenefile = self.core.convertPath(scenefile, "global")
+        data = self.core.entities.getScenefileData(scenefile)
+        task_name = state.l_taskName.text()
+        scenePath = scenefile
+        entityName = data.get("entityName")
+        entitytype = data.get("entity")
+        version = data.get("version")
+        step = STEP2TASKTRANSLATE.get( data.get("step")) or data.get("step")
+        # status = gazu.task.get_task_status_by_name(state.chb_taskStatus.currentText())
+        
+        comment = state.le_customKitsuPublishComment.text() or data.get("comment").replace("-", " ")
+        outputpath = outputpath.replace("..", ".")
+        ouputname, ext = os.path.splitext(outputpath)
+        filetype = ext.replace(".","")
+        prism_username = self.core.getConfig("globals", "username")
+
+
+
+        if is_image_type(filetype):
+            outputpath = self.convertSeqToVideo(self.core.projectBrowser(), os.getenv("TMP"))
+            ouputname, ext = os.path.splitext(outputpath)
+            filetype = ext.replace(".","")
+        
+        if entitytype == "shot":
+            shotname, seqname = self.core.entities.splitShotname(entityName)
+            if not shotname or not seqname or seqname == "no sequence":
+                QMessageBox.critical(
+                    self.core.messageParent,
+                    "Kitsu Publish",
+                    "shot or seq is none for entity {}".format(entityName),
+                )
+                return
+
+            if project_tokens["production_type"] == "tvshow":
+                try:
+                    epName, seqname = seqname.split(".", 1)
+                except:
+                    epName = "Main Pack"
+            else:
+                epName = None
+
+            if epName:
+                ep = gazu.shot.get_episode_by_name(project_tokens, epName)
+                if ep:
+                    seq = gazu.shot.get_sequence_by_name(project_tokens, seqname, ep)
+                else:
+                    QMessageBox.critical(
+                        self.core.messageParent,
+                        "Kitsu Publish",
+                        "No Episode name {} on Kitsu were found. Skipped publish to kitsu.".format(epName),
+                    )
+            else:
+                seq = gazu.shot.get_sequence_by_name(project_tokens, seqname)
+
+            if not seq:
+                QMessageBox.critical(
+                    self.core.messageParent,
+                    "Kitsu Publish",
+                    "No sequence name {} on Kitsu were found. Skipped publish to kitsu.".format(seqname),
+                )
+                return
+            entity_dict = gazu.shot.get_shot_by_name(seq, shotname)
+            if not entity_dict:
+                QMessageBox.critical(
+                    self.core.messageParent,
+                    "Kitsu Publish",
+                    "No shot name {} on Kitsu were found. Skipped publish to kitsu.".format(shotname),
+                )
+                return
+
+        else:
+            entity_dict = gazu.asset.get_asset_by_name(project_tokens, entityName)
+            if not entity_dict:
+                QMessageBox.critical(
+                    self.core.messageParent,
+                    "Kitsu Publish",
+                    "No asset name {} on Kitsu were found. Skipped publish to kitsu.".format(entityName),
+                )
+                return
+        
+
+        if is_movie_type(filetype):
+            
+            task_type_dict = gazu.task.get_task_type_by_name(step)
+            person_dict = gazu.client.get_current_user()
+            task_dict = gazu.task.get_task_by_name(entity_dict, task_type_dict)
+            if task_dict is None:
+                task_dict = gazu.task.new_task(entity_dict, task_type_dict)
+
+            type_status_dict = state.chb_taskStatus.currentData()
+
+            comment_dict = addComment(
+                task_dict,
+                type_status_dict,
+                comment=comment,
+                person=person_dict)
+
+            preview_dict = gazu.task.add_preview(task_dict,
+                                                comment_dict,
+                                                outputpath)
+
+            if state.chb_setPublishAsReview.isChecked():
+                gazu.task.set_main_preview(preview_dict)
+
+        if "metadata" not in entity_dict["data"]:
+            entity_dict["data"]["metadata"] = {}
+        if "prism" not in entity_dict["data"]["metadata"]:
+            entity_dict["data"]["metadata"]["prism"] = {}
+        entity_dict["data"]["metadata"]["prism"].update(data)
+
+        logger.info("Playblast submited to kitsu")
+
+    @err_catcher(name=__name__)
+    def onPostRender(self, state, scenefile, settings):
+        login_tokens, project_tokens = self.connectToKitsu(raise_login_error=False)
+        data = self.core.entities.getScenefileData(scenefile)
+        task_name = state.l_taskName.text()
+        scenePath = scenefile
+        entityName = data.get("entityName")
+        version = data.get("version")
+        step = STEP2TASKTRANSLATE.get( data.get("step")) or  data.get("step")
+        comment = data.get("comment")
+        username = self.core.getConfig("globals", "username")
+        
+        logger.debug("Render submited to kitsu")
 
     @err_catcher(name=__name__)
     def createAssets(self, assets):
@@ -1039,7 +1153,8 @@ class Prism_Kitsu_Functions(object):
                                                          asset_description,
                                                          extra_data={},
                                                          episode=None)
-
+            metadata = getEntityConfigData(self.core, asset_location)
+            updateKitsuMetadata(asset_dict, metadata, "asset")
             # Add thumbnail if preview image exists
             if thumbnailURL is not None and created_asset:
                 while True:
@@ -1106,9 +1221,12 @@ class Prism_Kitsu_Functions(object):
             # Split names
             shotName, seqName = self.core.entities.splitShotname(shot_name)
             if project_tokens["production_type"] == "tvshow":
-                epName, seqName = seqName.split(".", 1)
+                try:
+                    epName, seqName = seqName.split(".", 1)
+                except:
+                    epName = "Main Pack"
             else:
-                epName = None
+                epName = "none"
 
             thumbnailURL = previewImgPath if os.path.exists(
                 previewImgPath) else None
@@ -1123,6 +1241,8 @@ class Prism_Kitsu_Functions(object):
                                                       shotName,
                                                       shotRanges)
 
+            metadata = getEntityConfigData(self.core, self.core.getEntityPath(shot=shot_name))
+            updateKitsuMetadata(shot_dict, metadata, "shot")
             thumbnailURL = None # force no preview
             # Add thumbnail if preview image exists
             if thumbnailURL is not None and (created_shot or isUpdated):

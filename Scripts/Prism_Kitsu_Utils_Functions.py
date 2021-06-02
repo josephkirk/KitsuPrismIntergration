@@ -6,7 +6,6 @@ import os
 import sys
 import tempfile
 import shutil
-import TaskPicker
 import ruamel.yaml as yaml
 import gazu
 
@@ -19,6 +18,8 @@ except:
     from PySide.QtGui import *
 
 from PrismUtils.Decorators import err_catcher_plugin as err_catcher
+sys.path.append(os.path.join(os.path.dirname(__file__), "UserInterfaces"))
+import TaskPicker
 
 @err_catcher(name=__name__)
 def printText(text):
@@ -178,14 +179,15 @@ def createKitsuSequence(project_dict, sequence_name, episode_dict):
         else:
             sequence_dict = gazu.shot.new_sequence(project_dict,
                                                 sequence_name,
-                                                episode_dicts)
+                                                episode_dict)
+
         return sequence_dict, True
 
     else:
         return sequence_dict, False
 
 @err_catcher(name=__name__)
-def createKitsuShot(project_dict, sequence_dict, shot_name, ranges):
+def createKitsuShot(project_dict, sequence_dict, shot_name, ranges, metadata = {}):
     """
     returns
         Shot dict
@@ -214,6 +216,10 @@ def createKitsuShot(project_dict, sequence_dict, shot_name, ranges):
             else:
                 shot_dict["data"]["frame_in"] = ranges[0]
                 shot_dict["data"]["frame_out"] = ranges[1]
+            if not shot_dict["data"].get("metadata"):
+                shot_dict["data"]["metadata"] = metadata
+            else:
+                shot_dict["data"]["metadata"].update(metadata)
             shot_dict["nb_frames"] = ranges[1] - ranges[0]
             try:
                 gazu.shot.update_shot(shot_dict)
@@ -229,6 +235,34 @@ def createKitsuAssetType(name):
         return asset_type_dict, True
     else:
         return asset_type_dict, False
+
+@err_catcher(name=__name__)
+def getEntityConfigData(core, entity_location):
+    import glob
+    import json
+    configs = [f for f in glob.glob(os.path.join(entity_location,"*.yml"))]
+    data = {}
+    for config in configs:
+        data.update(json.loads(json.dumps(core.getConfig(configPath=config))))
+    return data
+    
+@err_catcher(name=__name__)
+def updateKitsuMetadata(entity_dict, metadata = {}, entity_type="asset"):
+    if not entity_dict.get("data"):
+        entity_dict["data"] = {}
+    if not entity_dict["data"].get("metadata"):
+        entity_dict["data"]["metadata"] = metadata
+    else:
+        entity_dict["data"]["metadata"].update(metadata)
+    update_callable_map = {
+        "asset": gazu.asset.update_asset,
+        "shot": gazu.shot.update_shot
+    }
+    if update_callable_map.get(entity_type):
+        try:
+            update_callable_map[entity_type](entity_dict)
+        except Exception as why:
+            print("Try to update {} with exception:\n{}".format(entity_dict, why))
 
 @err_catcher(name=__name__)
 def createKitsuAsset(project_dict,
