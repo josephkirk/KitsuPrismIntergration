@@ -1,4 +1,5 @@
 import string
+import json
 
 from . import client as raw
 from .sorting import sort_by_name
@@ -26,6 +27,20 @@ def all_task_types(client=default):
         list: Task types stored in database.
     """
     task_types = raw.fetch_all("task-types", client=client)
+    return sort_by_name(task_types)
+
+
+@cache
+def all_task_types_for_project(project, client=default):
+    """
+    Returns:
+        list: Task types stored in database.
+    """
+    project = normalize_model_parameter(project)
+    task_types = raw.fetch_all(
+        "projects/%/task-types" % project["id"],
+        client=client
+    )
     return sort_by_name(task_types)
 
 
@@ -666,6 +681,7 @@ def add_comment(
 
     else:
         attachment = attachments.pop()
+        data["checklist"] = json.dumps(checklist)
         return raw.upload(
             "actions/tasks/%s/comment" % task["id"],
             attachment,

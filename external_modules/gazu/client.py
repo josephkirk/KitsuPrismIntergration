@@ -5,6 +5,8 @@ import urllib
 
 from .encoder import CustomJSONEncoder
 
+from .__version__ import __version__
+
 from .exception import (
     TooBigFileException,
     NotAuthenticatedException,
@@ -127,10 +129,10 @@ def make_auth_header(client=default_client):
     Returns:
         Headers required to authenticate.
     """
+    headers = { "User-Agent": "CGWire Gazu %s" % __version__ }
     if "access_token" in client.tokens:
-        return {"Authorization": "Bearer %s" % client.tokens["access_token"]}
-    else:
-        return {}
+        headers["Authorization"] = "Bearer %s" % client.tokens["access_token"]
+    return headers
 
 
 def url_path_join(*items):
@@ -404,6 +406,7 @@ def download(path, file_path, client=default_client):
     ) as response:
         with open(file_path, "wb") as target_file:
             shutil.copyfileobj(response.raw, target_file)
+        return response
 
 
 def get_file_data_from_url(url, full=False, client=default_client):
