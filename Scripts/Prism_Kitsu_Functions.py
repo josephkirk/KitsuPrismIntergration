@@ -74,6 +74,7 @@ import add_external_folders
 import gazu
 # import box
 from Prism_Kitsu_Utils_Functions import *
+from Prism_Kitsu_App_Functions import *
 import TaskPicker
 
 
@@ -684,7 +685,7 @@ class Prism_Kitsu_Functions(object):
         # Process all shots ##
         for shotData in ksuShots:
             shotInfo = {}
-
+            
             # Create shot folders ##
             shotName = shotData["sequence_name"] + "-" + shotData["name"]
 
@@ -951,7 +952,8 @@ class Prism_Kitsu_Functions(object):
             state.chb_publishToKitsu = QCheckBox("Publish To Kitsu")
             state.le_customKitsuPublishComment = QLineEdit()
             state.le_customKitsuPublishComment.setPlaceholderText("Input Custom comment here ...")
-            state.chb_setPublishAsReview = QCheckBox("Set As Preview")
+            state.chb_setPublishAsReview = QCheckBox("Set As Preview Thumbnail")
+            state.chb_setPublishIndividualShots = QCheckBox("Publish Individual Shots")
             state.chb_publishToKitsu.setChecked(True)
             state.chb_publishToKitsu.toggled.connect(self.setIsPublishOnPlayblast)
             w_publishStatus = QWidget()
@@ -963,6 +965,8 @@ class Prism_Kitsu_Functions(object):
             state.chb_taskStatus.currentTextChanged.connect(self.setPublishStatus)
             w_publishStatus.layout().addWidget(state.chb_taskStatus)
             layout.addWidget(state.chb_publishToKitsu)
+            layout.addWidget(state.chb_setPublishAsReview)
+            layout.addWidget(state.chb_setPublishIndividualShots)
             layout.addWidget(w_publishStatus)
             layout.addWidget(state.le_customKitsuPublishComment)
             # layout.setContentsMargins(10,10,10,10)
@@ -992,13 +996,13 @@ class Prism_Kitsu_Functions(object):
         filetype = ext.replace(".","")
         prism_username = self.core.getConfig("globals", "username")
 
-
-
         if is_image_type(filetype):
             outputpath = self.convertSeqToVideo(self.core.projectBrowser(), os.getenv("TMP"))
             ouputname, ext = os.path.splitext(outputpath)
             filetype = ext.replace(".","")
         
+        publish_entities = []
+
         if entitytype == "shot":
             shotname, seqname = self.core.entities.splitShotname(entityName)
             if not shotname or not seqname or seqname == "no sequence":
@@ -1045,7 +1049,12 @@ class Prism_Kitsu_Functions(object):
                     "No shot name {} on Kitsu were found. Skipped publish to kitsu.".format(shotname),
                 )
                 return
-
+            if state.chb_setPublishIndividualShots.isChecked():
+                shots = app_get_shots()
+                for shotname, shotdata in shots.items():
+                    shot_dict = gazu.shot.get_shot_by_name(seq, shotname.capitalize())
+                    if shotdata.get("outputpath", "") and shot_dict:
+                        publish_entities.append((shot_dict, shotdata["outputpath"]))
         else:
             entity_dict = gazu.asset.get_asset_by_name(project_tokens, entityName)
             if not entity_dict:
@@ -1055,30 +1064,35 @@ class Prism_Kitsu_Functions(object):
                     "No asset name {} on Kitsu were found. Skipped publish to kitsu.".format(entityName),
                 )
                 return
+        publish_entities.append((entity_dict, outputpath))
         
+        for entity_dict, outputpath in publish_entities:
+            if is_movie_type(filetype):
+                try:
+                    task_type_dict = gazu.task.get_task_type_by_name(step)
+                    person_dict = gazu.client.get_current_user()
+                    task_dict = gazu.task.get_task_by_name(entity_dict, task_type_dict)
+                    if task_dict is None:
+                        task_dict = gazu.task.new_task(entity_dict, task_type_dict)
 
-        if is_movie_type(filetype):
-            
-            task_type_dict = gazu.task.get_task_type_by_name(step)
-            person_dict = gazu.client.get_current_user()
-            task_dict = gazu.task.get_task_by_name(entity_dict, task_type_dict)
-            if task_dict is None:
-                task_dict = gazu.task.new_task(entity_dict, task_type_dict)
+                    type_status_dict = state.chb_taskStatus.currentData()
 
-            type_status_dict = state.chb_taskStatus.currentData()
+                    comment_dict = addComment(
+                        task_dict,
+                        type_status_dict,
+                        comment=comment,
+                        person=person_dict)
 
-            comment_dict = addComment(
-                task_dict,
-                type_status_dict,
-                comment=comment,
-                person=person_dict)
+                    preview_dict = gazu.task.add_preview(task_dict,
+                                                        comment_dict,
+                                                        outputpath)
 
-            preview_dict = gazu.task.add_preview(task_dict,
-                                                comment_dict,
-                                                outputpath)
-
-            if state.chb_setPublishAsReview.isChecked():
-                gazu.task.set_main_preview(preview_dict)
+                    if state.chb_setPublishAsReview.isChecked():
+                        gazu.task.set_main_preview(preview_dict)
+                except Exception as why:
+                    logger.error("Failed to submit playblast to kitsu for {}".format(entity_dict.get("name") or entity_dict))
+                else:
+                    logger.info("Playblast submited to kitsu for {}".format(entity_dict.get("name") or entity_dict))
 
         if "metadata" not in entity_dict["data"]:
             entity_dict["data"]["metadata"] = {}
@@ -1086,7 +1100,15 @@ class Prism_Kitsu_Functions(object):
             entity_dict["data"]["metadata"]["prism"] = {}
         entity_dict["data"]["metadata"]["prism"].update(data)
 
-        logger.info("Playblast submited to kitsu")
+        #add RV metadata to shot
+        if step not in entity_dict["data"]["metadata"]:
+            entity_dict["data"]["metadata"][step] = {}
+        entity_dict["data"]["metadata"][step]["last"] = outputpath
+
+        if entitytype == "shot":
+            gazu.shot.update_shot(entity_dict)
+        else:
+            gazu.asset.update_asset(entity_dict)
 
     @err_catcher(name=__name__)
     def onPostRender(self, state, scenefile, settings):
