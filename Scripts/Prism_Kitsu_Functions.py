@@ -1096,26 +1096,25 @@ class Prism_Kitsu_Functions(object):
                 else:
                     logger.info("Playblast submited to kitsu for {}".format(entity_dict.get("name") or entity_dict))
 
-        if "metadata" not in entity_dict["data"]:
-            entity_dict["data"]["metadata"] = {}
-        if "prism" not in entity_dict["data"]["metadata"]:
-            entity_dict["data"]["metadata"]["prism"] = {}
-        if step not in entity_dict["data"]["metadata"]["prism"]:
-            entity_dict["data"]["metadata"]["prism"][step] = {}
-        entity_dict["data"]["metadata"]["prism"][step].update(data)
+            #add RV metadata to shot
+            if "RVMedia" not in entity_dict["data"]["metadata"]:
+                entity_dict["data"]["metadata"]["RVMedia"] = {}
+            if step not in entity_dict["data"]["metadata"]["RVMedia"]:
+                entity_dict["data"]["metadata"]["RVMedia"][step] = {}
+            entity_dict["data"]["metadata"]["RVMedia"][step]["last"] = outputpath
 
-        #add RV metadata to shot
-        if "RVMedia" not in entity_dict["data"]["metadata"]:
-            entity_dict["data"]["metadata"]["RVMedia"] = {}
-        if step not in entity_dict["data"]["metadata"]["RVMedia"]:
-            entity_dict["data"]["metadata"]["RVMedia"][step] = {}
-        
-        entity_dict["data"]["metadata"]["RVMedia"][step]["last"] = outputpath
+            if "metadata" not in entity_dict["data"]:
+                entity_dict["data"]["metadata"] = {}
+            if "prism" not in entity_dict["data"]["metadata"]:
+                entity_dict["data"]["metadata"]["prism"] = {}
+            if step not in entity_dict["data"]["metadata"]["prism"]:
+                entity_dict["data"]["metadata"]["prism"][step] = {}
+            entity_dict["data"]["metadata"]["prism"][step].update(data)
 
-        if entitytype == "shot":
-            gazu.shot.update_shot(entity_dict)
-        else:
-            gazu.asset.update_asset(entity_dict)
+            if entitytype == "shot":
+                gazu.shot.update_shot(entity_dict)
+            else:
+                gazu.asset.update_asset(entity_dict)
 
     @err_catcher(name=__name__)
     def onPostRender(self, state, scenefile, settings):
