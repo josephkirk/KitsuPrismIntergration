@@ -1105,7 +1105,7 @@ class Prism_Kitsu_Functions(object):
                 entity_dict["data"]["metadata"]["RVMedia"] = {}
             if step not in entity_dict["data"]["metadata"]["RVMedia"]:
                 entity_dict["data"]["metadata"]["RVMedia"][step] = {}
-            entity_dict["data"]["metadata"]["RVMedia"][step]["last"] = outputpath
+            entity_dict["data"]["metadata"]["RVMedia"][step]["last"] = os.path.normpath(outputpath)
 
 			#add prism metadata
             if "prism" not in entity_dict["data"]["metadata"]:
