@@ -1096,6 +1096,10 @@ class Prism_Kitsu_Functions(object):
                 else:
                     logger.info("Playblast submited to kitsu for {}".format(entity_dict.get("name") or entity_dict))
 
+
+            if "metadata" not in entity_dict["data"]:
+                entity_dict["data"]["metadata"] = {}
+
             #add RV metadata to shot
             if "RVMedia" not in entity_dict["data"]["metadata"]:
                 entity_dict["data"]["metadata"]["RVMedia"] = {}
@@ -1103,8 +1107,7 @@ class Prism_Kitsu_Functions(object):
                 entity_dict["data"]["metadata"]["RVMedia"][step] = {}
             entity_dict["data"]["metadata"]["RVMedia"][step]["last"] = outputpath
 
-            if "metadata" not in entity_dict["data"]:
-                entity_dict["data"]["metadata"] = {}
+			#add prism metadata
             if "prism" not in entity_dict["data"]["metadata"]:
                 entity_dict["data"]["metadata"]["prism"] = {}
             if step not in entity_dict["data"]["metadata"]["prism"]:
