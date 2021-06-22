@@ -13,7 +13,9 @@ def maya_get_shots():
         shot_path = os.path.join(os.getenv("TMP"), shot + ".mov")
         # if not os.path.exists(shot_path):
         maya.mel.eval("performPlayblastShot(0, \"" + shot + "\")")
-        result[shot] = {"outputpath": shot_path}
+        result[shot] = {
+            "name": cmds.shot(shot, shotName=True, q=True),
+            "outputpath": shot_path}
     return result
 
 @err_catcher(name=__name__)

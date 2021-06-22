@@ -1052,7 +1052,9 @@ class Prism_Kitsu_Functions(object):
             if state.chb_setPublishIndividualShots.isChecked():
                 shots = app_get_shots()
                 for shotname, shotdata in shots.items():
-                    shot_dict = gazu.shot.get_shot_by_name(seq, shotname.capitalize())
+                    shot_dict = gazu.shot.get_shot_by_name(seq, shotdata.get("name", "null").capitalize())
+                    if not shot_dict:
+                        shot_dict = gazu.shot.get_shot_by_name(seq, shotname.capitalize())
                     if shotdata.get("outputpath", "") and shot_dict:
                         publish_entities.append((shot_dict, shotdata["outputpath"]))
         else:
