@@ -1138,8 +1138,18 @@ class Prism_Kitsu_Functions(object):
             if "RVMedia" not in entity_dict["data"]["metadata"]:
                 entity_dict["data"]["metadata"]["RVMedia"] = {}
             if step not in entity_dict["data"]["metadata"]["RVMedia"]:
-                entity_dict["data"]["metadata"]["RVMedia"][step] = {}
-            entity_dict["data"]["metadata"]["RVMedia"][step]["last"] = os.path.normpath(outputpath)
+                entity_dict["data"]["metadata"]["RVMedia"][step] = []
+            if not isinstance(entity_dict["data"]["metadata"]["RVMedia"][step], list):
+                entity_dict["data"]["metadata"]["RVMedia"][step] = []
+            for version in entity_dict["data"]["metadata"]["RVMedia"][step]:
+                for k, v in version.items():
+                    if k == "last":
+                        entity_dict["data"]["metadata"]["RVMedia"][step].append(
+                            {str(len(entity_dict["data"]["metadata"]["RVMedia"][step])-1): v}
+                        )
+                        entity_dict["data"]["metadata"]["RVMedia"][step].remove(version)
+            entity_dict["data"]["metadata"]["RVMedia"][step].append( 
+                {"last": os.path.normpath(outputpath)})
 
 			#add prism metadata
             if "prism" not in entity_dict["data"]["metadata"]:
