@@ -40,7 +40,9 @@
 #
 ####################################################
 
+from genericpath import isfile
 import os
+from posixpath import split
 import sys
 import tempfile
 import shutil
@@ -954,8 +956,15 @@ class Prism_Kitsu_Functions(object):
             state.le_customKitsuPublishComment.setPlaceholderText("Input Custom comment here ...")
             state.chb_setPublishAsReview = QCheckBox("Set As Preview Thumbnail")
             state.chb_setPublishIndividualShots = QCheckBox("Publish Individual Shots")
+            state.chb_setCreateShot = QCheckBox("Create Shot If Missing")
             state.chb_publishToKitsu.setChecked(True)
             state.chb_publishToKitsu.toggled.connect(self.setIsPublishOnPlayblast)
+            if hasattr(state, "chb_useCameraSequencer"):
+                state.chb_useCameraSequencer.setChecked(False)
+                state.chb_setPublishIndividualShots.toggled.connect(state.chb_useCameraSequencer.setChecked)
+            if hasattr(state, "chb_playblastEachShot"):
+                state.chb_playblastEachShot.setChecked(False)
+                state.chb_setPublishIndividualShots.toggled.connect(state.chb_playblastEachShot.setChecked)
             w_publishStatus = QWidget()
             w_publishStatus.setLayout(QHBoxLayout())
             w_publishStatus.layout().addWidget(QLabel("Publish Status: "))
@@ -967,6 +976,7 @@ class Prism_Kitsu_Functions(object):
             layout.addWidget(state.chb_publishToKitsu)
             layout.addWidget(state.chb_setPublishAsReview)
             layout.addWidget(state.chb_setPublishIndividualShots)
+            layout.addWidget(state.chb_setCreateShot)
             layout.addWidget(w_publishStatus)
             layout.addWidget(state.le_customKitsuPublishComment)
             # layout.setContentsMargins(10,10,10,10)
@@ -1049,14 +1059,36 @@ class Prism_Kitsu_Functions(object):
                     "No shot name {} on Kitsu were found. Skipped publish to kitsu.".format(shotname),
                 )
                 return
-            if state.chb_setPublishIndividualShots.isChecked():
-                shots = app_get_shots()
-                for shotname, shotdata in shots.items():
-                    shot_dict = gazu.shot.get_shot_by_name(seq, shotdata.get("name", "null").capitalize())
-                    if not shot_dict:
-                        shot_dict = gazu.shot.get_shot_by_name(seq, shotname.capitalize())
-                    if shotdata.get("outputpath", "") and shot_dict:
-                        publish_entities.append((shot_dict, shotdata["outputpath"]))
+            shots_path = os.path.join( os.path.dirname(self.core.convertPath(outputpath, "global")), "shots")
+            logger.info("Check for shots in {}".format(shots_path))
+            if state.chb_setPublishIndividualShots.isChecked() and os.path.exists(shots_path):
+                files = (d for d in os.listdir(shots_path) if os.path.isfile(os.path.join(shots_path, d)))
+                for shot_file in files:
+                    try:
+                        shotfilename =os.path.splitext(shot_file)[0]
+                        try:
+                            shotname, ranges = shotfilename.split("_", 1)
+                        except ValueError:
+                            shotname = shotfilename
+                        try:
+                            start_shotframe, end_shotframe = ranges.split("-",1)
+                            start_shotframe = int(start_shotframe)
+                            end_shotframe = int(end_shotframe)
+                        except ValueError:
+                            start_shotframe, end_shotframe = (0, 100)
+                        if state.chb_setCreateShot.isChecked():
+                            try:
+                                shot_dict, isCreated, isUpdated = createKitsuShot(project_tokens, seq, shotname.capitalize(), (start_shotframe, end_shotframe))
+                            except:
+                                shot_dict = None
+                        else:
+                            shot_dict = gazu.shot.get_shot_by_name(seq, shotname)
+                        if shot_dict:
+                            publish_entities.append((shot_dict, os.path.join(shots_path, shot_file)))
+                        else:
+                            logger.error("Failed to find shot with name {}".format(shotname))
+                    except Exception as why:
+                        logger.error("Error when publish shot with name {}: \n{}".format(shotname, why))
         else:
             entity_dict = gazu.asset.get_asset_by_name(project_tokens, entityName)
             if not entity_dict:
@@ -1069,7 +1101,7 @@ class Prism_Kitsu_Functions(object):
         publish_entities.append((entity_dict, outputpath))
         
         for entity_dict, outputpath in publish_entities:
-            if is_movie_type(filetype):
+            if is_movie_type(filetype) and entity_dict:
                 try:
                     task_type_dict = gazu.task.get_task_type_by_name(step)
                     person_dict = gazu.client.get_current_user()
@@ -1096,6 +1128,8 @@ class Prism_Kitsu_Functions(object):
                 else:
                     logger.info("Playblast submited to kitsu for {}".format(entity_dict.get("name") or entity_dict))
 
+            if not entity_dict.get("data"):
+                entity_dict["data"] = {}
 
             if "metadata" not in entity_dict["data"]:
                 entity_dict["data"]["metadata"] = {}
