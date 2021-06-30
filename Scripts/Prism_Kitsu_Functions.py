@@ -73,7 +73,7 @@ if not modulePath in sys.path:
     sys.path.append(modulePath)
 
 import add_external_folders
-import gazu
+import gazulite as gazu
 # import box
 from Prism_Kitsu_Utils_Functions import *
 from Prism_Kitsu_App_Functions import *
@@ -134,6 +134,7 @@ class Prism_Kitsu_Functions(object):
     def registerCallbacks(self):
         self.callbacks.append(self.core.registerCallback("projectBrowser_getAssetMenu", self.projectBrowser_getAssetMenu))
         self.callbacks.append(self.core.registerCallback("projectBrowser_getShotMenu", self.projectBrowser_getShotMenu))
+        self.callbacks.append(self.core.registerCallback("onStateManagerOpen", self.onStateManagerOpen))
         self.callbacks.append(self.core.registerCallback("onStateCreated", self.onStateCreated))
         self.callbacks.append(self.core.registerCallback("postPlayblast", self.onPostPlayblast))
         self.callbacks.append(self.core.registerCallback("postRender", self.onPostRender))
@@ -387,7 +388,7 @@ class Prism_Kitsu_Functions(object):
             self.createprjmanShots([shotName])
 
     @err_catcher(name=__name__)
-    def connectToKitsu(self, user=True, raise_login_error=True):
+    def connectToKitsu(self, user=True, raise_login_error=True, show_login_widget=True):
         try:
             prjmanSite = self.core.getConfig("kitsu", "site", configPath=self.core.prismIni)
             prjmanUser = self.core.getConfig("kitsu", "username")
@@ -399,11 +400,13 @@ class Prism_Kitsu_Functions(object):
             try:
                 login_tokens = gazu.log_in(prjmanUser, prjmanUserPassword)
             except:
-                from qtazulite.widgets.login import Login
-                login_window = Login(host = api_host, user=prjmanUser, password=prjmanUserPassword)
-                login_window.logged_in.connect(self.prismSettings_saveLoginSettings)
-                login_window.exec_()
-                login_tokens = login_window.login_tokens
+                if show_login_widget:
+                    from qtazulite.widgets.login import Login
+                    login_window = Login(host = api_host, user=prjmanUser, password=prjmanUserPassword)
+                    login_window.logged_in.connect(self.prismSettings_saveLoginSettings)
+                    login_window.exec_()
+                    login_tokens = login_window.login_tokens
+
             project_tokens = gazu.project.get_project_by_name(prjmanName)
 
             return login_tokens, project_tokens
@@ -945,8 +948,11 @@ class Prism_Kitsu_Functions(object):
             self.cb_status.addItem(status['name'], status)
 
     @err_catcher(name=__name__)
+    def onStateManagerOpen(self, origin):
+        self.connectToKitsu(raise_login_error=True)
+
+    @err_catcher(name=__name__)
     def onStateCreated(self, origin, state, stateData):
-        self.connectToKitsu(raise_login_error=False)
         if hasattr(state, "gb_playblast"):
             wid = QGroupBox("Kitsu")
             layout = QVBoxLayout()
@@ -969,8 +975,11 @@ class Prism_Kitsu_Functions(object):
             w_publishStatus.setLayout(QHBoxLayout())
             w_publishStatus.layout().addWidget(QLabel("Publish Status: "))
             state.chb_taskStatus = QComboBox()
-            for status in gazu.task.all_task_statuses():
-                state.chb_taskStatus.addItem(status['name'], status)
+            try:
+                for status in gazu.task.all_task_statuses():
+                    state.chb_taskStatus.addItem(status['name'], status)
+            except:
+                pass
             state.chb_taskStatus.currentTextChanged.connect(self.setPublishStatus)
             w_publishStatus.layout().addWidget(state.chb_taskStatus)
             layout.addWidget(state.chb_publishToKitsu)
@@ -987,7 +996,7 @@ class Prism_Kitsu_Functions(object):
     def onPostPlayblast(self, state, scenefile, startframe, endframe, outputpath):
         if not state.chb_publishToKitsu.isChecked():
             return
-        login_tokens, project_tokens = self.connectToKitsu(raise_login_error=False)
+        login_tokens, project_tokens = self.connectToKitsu(raise_login_error=False, show_login_widget=False)
         if not (login_tokens and project_tokens):
             return
         scenefile = self.core.convertPath(scenefile, "global")
